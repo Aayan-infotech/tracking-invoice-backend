@@ -1,0 +1,660 @@
+import Project from "../models/project.model.js";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import Task from "../models/task.model.js";
+import AssignTask from "../models/assignTask.model.js";
+import QualityAssurance from "../models/qualityAssurance.model.js";
+import { assign } from "nodemailer/lib/shared/index.js";
+import Attendance from "../models/attendance.model.js";
+import { isValidObjectId } from "../utils/isValidObjectId.js";
+
+
+const getAllProjects = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+    const search = req.query.search || '';
+
+    const aggregation = [];
+    if (search) {
+        aggregation.push({
+            $match: {
+                $or: [
+                    { projectName: { $regex: search, $options: "i" } },
+                    { description: { $regex: search, $options: "i" } }
+                ]
+            }
+        });
+    }
+    aggregation.push({
+        $facet: {
+            projects: [
+                { $skip: skip },
+                { $limit: limit },
+                { $project: { __v: 0 } },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+    const result = await Project.aggregate(aggregation);
+
+    const projects = result[0].projects;
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    return res.status(200).json(new ApiResponse(200,
+        projects.length > 0 ? "Fetched all projects successfully" : "No projects found",
+        projects.length > 0 ? {
+            projects,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+
+});
+
+const addProject = asyncHandler(async (req, res) => {
+    const { projectName, description, startDate, endDate } = req.body;
+    const newProject = new Project({
+        projectName,
+        description,
+        startDate,
+        endDate
+    });
+
+    await newProject.save();
+
+    return res.status(201).json(new ApiResponse(201, "Project created successfully", newProject));
+});
+
+const updateProject = asyncHandler(async (req, res) => {
+    const projectId = req.params.projectId;
+    const { projectName, description, startDate, endDate, status } = req.body;
+    const updatedProject = await Project.findByIdAndUpdate(projectId, {
+        projectName,
+        description,
+        startDate,
+        endDate,
+        status
+    }, { new: true });
+
+    return res.status(200).json(new ApiResponse(200, "Project updated successfully", updatedProject));
+});
+
+const deleteProject = asyncHandler(async (req, res) => {
+    const projectId = req.params.projectId;
+    await Project.findByIdAndDelete(projectId);
+    return res.status(200).json(new ApiResponse(200, "Project deleted successfully"));
+});
+
+const getProjectDropDown = asyncHandler(async (req, res) => {
+    const projects = await Project.find({ status: 'active' }).select('projectName');
+    return res.status(200).json(new ApiResponse(200, 'Get Project dropdown successfully', projects));
+});
+
+const getAllTasks = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const aggregation = [];
+
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            tasks: [
+                { $skip: skip },
+                { $limit: limit },
+                { $project: { __v: 0 } },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+    const result = await Task.aggregate(aggregation);
+
+    const tasks = result[0].tasks;
+
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    res.status(200).json(new ApiResponse(200,
+        tasks.length > 0 ? "Fetched all tasks successfully" : "No tasks found",
+        tasks.length > 0 ? {
+            tasks,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+});
+
+const addTask = asyncHandler(async (req, res) => {
+    const { projectId, taskName, amount, description } = req.body;
+
+    if (!projectId || !taskName || !amount) {
+        throw new ApiError(400, 'Missing required fields');
+    }
+
+    // Check if the same task already exists in the project
+    const existingTask = await Task.findOne({ projectId, taskName });
+    if (existingTask) {
+        throw new ApiError(409, 'Task with the same name already exists in this project');
+    }
+
+    // Create and save the task
+    const task = await Task.create({
+        projectId,
+        taskName,
+        amount,
+        description,
+    });
+
+    if (!task) {
+        throw new ApiError(400, 'Failed to save the task');
+    }
+
+    return res.status(200).json(new ApiResponse(200, 'Task created successfully', task));
+});
+
+const updateTask = asyncHandler(async (req, res) => {
+    const taskId = req.params.taskId;
+    const { projectId, taskName, description, status, amount } = req.body;
+
+    const updatedTask = await Task.findByIdAndUpdate(taskId, {
+        projectId,
+        taskName,
+        description,
+        status,
+        amount
+    }, { new: true });
+
+    if (!updatedTask) {
+        throw new ApiError(404, 'Task not found');
+    }
+
+    return res.status(200).json(new ApiResponse(200, "Task updated successfully", updatedTask));
+});
+
+
+const deleteTask = asyncHandler(async (req, res) => {
+    const taskId = req.params.taskId;
+    const deletedTask = await Task.findByIdAndDelete(taskId);
+    if (!deletedTask) {
+        throw new ApiError(404, 'Task not found');
+    }
+    return res.status(200).json(new ApiResponse(200, "Task deleted successfully"));
+}
+);
+
+
+const getAllTaskofProject = asyncHandler(async (req, res) => {
+    const projectId = req.params.projectId;
+    const tasks = await Task.find({ projectId }).select('taskName _id').sort({ createdAt: -1 });
+    if (!tasks || tasks.length === 0) {
+        throw new ApiError(404, 'No tasks found');
+    }
+    return res.status(200).json(new ApiResponse(200, "Tasks fetched successfully", tasks));
+});
+
+const getAssignTasks = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const aggregation = [];
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "userId",
+            as: "userDetails"
+        }
+    });
+
+
+    aggregation.push({
+        $unwind: {
+            path: "$userDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            tasks: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        taskId: "$taskDetails._id",
+                        taskName: "$taskDetails.taskName",
+                        projectId: "$projectDetails._id",
+                        projectName: "$projectDetails.projectName",
+                        userId: "$userDetails.userId",
+                        name: "$userDetails.name",
+                        username: "$userDetails.username",
+                    }
+                },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+    const result = await AssignTask.aggregate(aggregation);
+
+    const tasks = result[0].tasks;
+
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    res.status(200).json(new ApiResponse(200,
+        tasks.length > 0 ? "Fetched all assigned tasks successfully" : "No assigned tasks found",
+        tasks.length > 0 ? {
+            tasks,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+});
+
+const assignTask = asyncHandler(async (req, res) => {
+    const { taskId, projectId, userId } = req.body;
+    if (!taskId || !projectId || !userId) {
+        throw new ApiError(400, 'Missing required fields');
+    }
+
+    // Check if the task is already assigned to the user in the project
+    const existingAssignment = await AssignTask.findOne({ taskId, projectId, userId });
+    if (existingAssignment) {
+        throw new ApiError(400, 'Task is already assigned to the user in the project');
+    }
+
+    const newAssignment = new AssignTask({ taskId, projectId, userId });
+    await newAssignment.save();
+
+    res.status(201).json(new ApiResponse(201, 'Task assigned successfully', newAssignment));
+});
+
+
+const updateAssignTask = asyncHandler(async (req, res) => {
+    const { taskId, projectId, userId } = req.body;
+    const assignmentId = req.params.assignmentId;
+
+    const updatedAssignment = await AssignTask.findByIdAndUpdate(assignmentId, {
+        taskId,
+        projectId,
+        userId
+    });
+
+    res.status(200).json(new ApiResponse(200, 'Task assignment updated successfully', updatedAssignment));
+});
+
+const deleteAssignedTask = asyncHandler(async (req, res) => {
+    const assignmentId = req.params.assignmentId;
+    const deletedAssignment = await AssignTask.findByIdAndDelete(assignmentId);
+    if (!deletedAssignment) {
+        throw new ApiError(404, 'Assignment not found');
+    }
+    res.status(200).json(new ApiResponse(200, 'Task assignment deleted successfully'));
+});
+
+
+const getQualityAssurance = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const aggregation = [];
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            qualityAssurances: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        projectName: "$projectDetails.projectName",
+                        projectId: "$projectDetails._id",
+                        documentName: 1,
+                        status: 1,
+                        _id: 1,
+                        documentHtml: 1,
+
+                    }
+                },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+    const result = await QualityAssurance.aggregate(aggregation);
+    const qualityAssurances = result[0].qualityAssurances;
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+    res.status(200).json(new ApiResponse(200,
+        qualityAssurances.length > 0 ? "Fetched all quality assurances successfully" : "No quality assurances found",
+        qualityAssurances.length > 0 ? {
+            qualityAssurances,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+
+
+});
+
+
+const addQualityAssurance = asyncHandler(async (req, res) => {
+    const { projectId, documentName, documentDescription } = req.body;
+
+
+    const newQualityAssurance = new QualityAssurance({
+        projectId,
+        documentName,
+        documentHtml: documentDescription,
+        typeOfDocument: 'text',
+    });
+    await newQualityAssurance.save();
+
+    res.status(201).json(new ApiResponse(201, 'Quality assurance document added successfully', newQualityAssurance));
+});
+
+
+const updateQualityAssurance = asyncHandler(async (req, res) => {
+    const qualityAssuranceId = req.params.qaId;
+    const qualityAssurance = await QualityAssurance.findById(qualityAssuranceId);
+    if (!qualityAssurance) {
+        throw new ApiError(404, 'Quality assurance document not found');
+    }
+    const { projectId, documentName, documentDescription } = req.body;
+
+    const updatedQualityAssurance = await QualityAssurance.findByIdAndUpdate(qualityAssuranceId, {
+        projectId,
+        documentName,
+        documentHtml: documentDescription
+    }, { new: true });
+
+    if (!updatedQualityAssurance) {
+        throw new ApiError(404, 'Quality assurance document not found');
+    }
+
+    res.status(200).json(new ApiResponse(200, 'Quality assurance document updated successfully', updatedQualityAssurance));
+});
+
+const deleteQualityAssurance = asyncHandler(async (req, res) => {
+    const qualityAssuranceId = req.params.qaId;
+    const deletedQualityAssurance = await QualityAssurance.findByIdAndDelete(qualityAssuranceId);
+    if (!deletedQualityAssurance) {
+        throw new ApiError(404, 'Quality assurance document not found');
+    }
+    res.status(200).json(new ApiResponse(200, 'Quality assurance document deleted successfully'));
+});
+
+const clockIn = asyncHandler(async (req, res) => {
+    const { latitude, longitude } = req.body;
+    if (!latitude || !longitude) {
+        throw new ApiError(400, 'Latitude and Longitude are required');
+    }
+    const user = req.user;
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+
+    const attendance = await Attendance.create({
+        userId: user.userId,
+        clockInTime: new Date(),
+        latitude,
+        longitude
+    });
+    if (!attendance) {
+        throw new ApiError(500, 'Failed to clock in');
+    }
+
+    res.status(201).json(new ApiResponse(201, 'Clock-in successful', attendance));
+});
+const getProjectDetails = asyncHandler(async (req, res) => {
+    const projectId = req.params.projectId;
+    if (!isValidObjectId(projectId)) {
+        throw new ApiError(400, 'Invalid project ID');
+    }
+    const project = await Project.findById(projectId);
+    if (!project) {
+        throw new ApiError(404, 'Project not found');
+    }
+
+    const aggregation = [];
+    aggregation.push({
+        $match: { _id: project._id }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "_id",
+            foreignField: "projectId",
+            as: "tasks"
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "assigntasks",
+            localField: "_id",
+            foreignField: "projectId",
+            as: "assignedMembers"
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "users",
+            localField: "assignedMembers.userId",
+            foreignField: "userId",
+            as: "assignedMembersDetails"
+        }
+    });
+
+    aggregation.push({
+        $project: {
+            _id: 1,
+            projectName: 1,
+            description: 1,
+            startDate: 1,
+            endDate: 1,
+            status: 1,
+            tasks: {
+                $map: {
+                    input: "$tasks",
+                    as: "task",
+                    in: {
+                        _id: "$$task._id",
+                        taskName: "$$task.taskName",
+                        amount: "$$task.amount",
+                        description: "$$task.description",
+                        status: "$$task.status"
+                    }
+                }
+            },
+            assignedMembersDetails: {
+                $map: {
+                    input: "$assignedMembersDetails",
+                    as: "member",
+                    in: {
+                        userId: "$$member.userId",
+                        name: "$$member.name",
+                        username: "$$member.username",
+                        profile_image: "$$member.profile_image"
+                    }
+                }
+            }
+        }
+    });
+
+    const result = await Project.aggregate(aggregation);
+    const projectDetails = result[0];
+    if (!projectDetails) {
+        throw new ApiError(404, 'Project details not found');
+    }
+    res.status(200).json(new ApiResponse(200, 'Project details fetched successfully', projectDetails));
+
+});
+
+const getMyProjects = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const userId = req.user.userId;
+    if (!userId) {
+        throw new ApiError(400, 'User ID is required');
+    }
+
+    const aggregation = [
+        {
+            $match: { userId: userId }
+        },
+        {
+            $lookup: {
+                from: "projects",
+                localField: "projectId",
+                foreignField: "_id",
+                as: "projectDetails"
+            }
+        },
+        {
+            $unwind: "$projectDetails"
+        },
+        {
+            $replaceRoot: { newRoot: "$projectDetails" }
+        },
+        {
+            $facet: {
+                metadata: [
+                    { $count: "total" }
+                ],
+                data: [
+                    { $skip: skip },
+                    { $limit: limit }
+                ]
+            }
+        },
+        {
+            $addFields: {
+                total: { $arrayElemAt: ["$metadata.total", 0] }
+            }
+        }
+    ];
+
+    const result = await AssignTask.aggregate(aggregation);
+
+    const projects = result[0]?.data || [];
+    const total = result[0]?.total || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    res.status(200).json(new ApiResponse(200, 'User projects fetched successfully', {
+        projects,
+        total_page: totalPages,
+        current_page: page,
+        total_records: total,
+        per_page: limit
+    }));
+});
+
+
+
+const getDocumentType = asyncHandler(async (req, res) => {
+    throw new ApiError(501, 'This endpoint is not implemented yet');
+    // console.log('Fetching document types for project');
+    // console.log(req.query);
+    // const { projectId } = req.query;
+    // console.log('Project ID:', projectId);
+    // if (!projectId) {
+    //     throw new ApiError(400, 'Project ID is required');
+    // }
+
+    // const qualityAssurances = await QualityAssurance.find({ projectId }).select('documentName _id ').sort({ createdAt: -1 });
+
+    // res.status(200).json(new ApiResponse(200, 'Document types fetched successfully', qualityAssurances));
+});
+
+
+export {
+    getAllProjects, addProject, updateProject, deleteProject, getAllTasks, addTask, getProjectDropDown, updateTask, deleteTask, getAllTaskofProject, getAssignTasks, assignTask, updateAssignTask, deleteAssignedTask, getQualityAssurance, addQualityAssurance, updateQualityAssurance, deleteQualityAssurance, clockIn, getProjectDetails,
+    getMyProjects, getDocumentType
+};
