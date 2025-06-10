@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "docker.io/aayanindia/invoice-backend"
-        CONTAINER_PORT = "3333"
+        CONTAINER_PORT = "3030"
         HOST_PORT = "3333"
         DOCKER_HUB_USERNAME = credentials('docker-hub-username')
         DOCKER_HUB_PASSWORD = credentials('docker-hub-password')
