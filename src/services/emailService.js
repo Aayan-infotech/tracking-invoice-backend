@@ -3,8 +3,8 @@ import {loadConfig} from "../config/loadConfig.js";
 const config = await loadConfig();
 
 const transporter = nodemailer.createTransport({
-    host: "sandbox.smtp.mailtrap.io",
-    // service: "gmail",
+    // host: "sandbox.smtp.mailtrap.io",
+    service: "gmail",
     port: 2525,
     auth: {
         user: config.EMAIL_USER,

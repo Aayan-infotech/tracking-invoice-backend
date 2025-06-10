@@ -18,9 +18,17 @@ const generateOTP = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
 };
 
-const generateUserName = (email) => {
-  
-}
+const generateUniqueUserName = async (email) => {
+  let baseUsername = email.split("@")[0].toLowerCase().replace(/\s+/g, "_");
+  let username = baseUsername;
+  let counter = 1;
 
+  while (await User.exists({ username })) {
+    username = `${baseUsername}_${counter}`;
+    counter++;
+  }
 
-export { generateUniqueUserId, generateOTP };
+  return username;
+};
+
+export { generateUniqueUserId, generateOTP, generateUniqueUserName };

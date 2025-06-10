@@ -7,6 +7,7 @@ import fs from "fs";
 import { sendEmail } from "../services/emailService.js";
 import Project from "../models/project.model.js";
 import Task from "../models/task.model.js";
+import { DeviceDetails } from "../models/deviceDetails.model.js";
 
 const getAllUsers = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -228,12 +229,12 @@ const securitySetting = asyncHandler( async (req, res) =>{
     throw new ApiError(404, "User not found");
   }
 
-  // 
+  const deviceDetails = await DeviceDetails.find({ userId: user.userId });
 
   res.json(
     new ApiResponse(200, "Security settings fetched successfully", {
       is2FAEnabled: user.is2FAEnabled,
-      profile_image: user.profile_image,
+      deviceDetails,
     })
   );
 

@@ -3,7 +3,7 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
-import { generateUniqueUserId, generateOTP } from "../utils/HelperFunctions.js";
+import { generateUniqueUserId, generateOTP, generateUniqueUserName } from "../utils/HelperFunctions.js";
 import { sendEmail } from "../services/emailService.js";
 import fs from "fs";
 import { loadConfig } from "../config/loadConfig.js";
@@ -54,6 +54,7 @@ const register = asyncHandler(async (req, res) => {
 
   const userId = await generateUniqueUserId();
   const otp = await generateOTP();
+  const username = await generateUniqueUserName(userEmail);
 
   const html = fs.readFileSync("./src/emails/otpTemplate.html", "utf-8");
   const subject = "OTP Verification";
@@ -76,6 +77,7 @@ const register = asyncHandler(async (req, res) => {
   const user = new User({
     userId,
     email: userEmail,
+    username,
     otp,
     otpExpire: new Date(Date.now() + 10 * 60 * 1000),
   });
@@ -87,7 +89,9 @@ const register = asyncHandler(async (req, res) => {
   );
 
   // check if user is created
-  const createdUser = await User.findById(user._id);
+  const createdUser = await User.findById(user._id).select(
+    "-password -refreshToken -otp -otpExpire -refreshToken"
+  );
 
   if (!createdUser) {
     throw new ApiError(500, "Something went wrong while registering");
@@ -336,13 +340,16 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   // get the deviceToken update the isloggedIn to false
 
-  const Device = await DeviceDetails.findOne({
+  const device = await DeviceDetails.findOne({
     deviceToken: deviceToken,
+    userId: req.user.userId,
   });
 
-  if(Device){
-    Device.isLoggedIn = false;
-    await Device.save();
+  console.log("Device Details", device);
+
+  if (device) {
+    device.isLoggedIn = false;
+    await device.save();
   }
 
   const options = {
