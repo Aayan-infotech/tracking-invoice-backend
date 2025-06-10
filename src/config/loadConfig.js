@@ -31,6 +31,10 @@ const loadConfig = async () => {
             REFRESH_TOKEN_SECRET: secrets.REFRESH_TOKEN_SECRET,
             REFRESH_TOKEN_EXPIRY: secrets.REFRESH_TOKEN_EXPIRY,
 
+            // Email configuration
+            EMAIL_USER: secrets.EMAIL_USER,
+            EMAIL_PASS: secrets.EMAIL_PASS,
+
           };
         } catch (parseError) {
           console.error("JSON Parse Error:", parseError);
@@ -54,6 +58,10 @@ const loadConfig = async () => {
     ACCESS_TOKEN_EXPIRY: process.env.ACCESS_TOKEN_EXPIRY || "15m",
     REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET,
     REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY || "7d",
+
+    // Email configuration
+    EMAIL_USER: process.env.EMAIL_USER,
+    EMAIL_PASS: process.env.EMAIL_PASS,
 
   };
 };
