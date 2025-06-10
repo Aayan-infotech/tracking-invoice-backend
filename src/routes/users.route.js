@@ -9,6 +9,7 @@ import {
   updateProfile,
   getAllVerifiedUsers,
   getDashboard,
+  securitySetting,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
@@ -46,6 +47,7 @@ router.put(
   updateProfile
 );
 router.get('/all-verified-users',verifyJWT,getAllVerifiedUsers);
-router.get('/dashboard',verifyJWT,getDashboard)
+router.get('/dashboard',verifyJWT,getDashboard);
+router.get('/security-setting',verifyJWT,securitySetting);
 
 export default router;

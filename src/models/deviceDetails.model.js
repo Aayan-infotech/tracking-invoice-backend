@@ -22,6 +22,11 @@ const deviceDetailsSchema = new mongoose.Schema({
     isLoggedIn:{
         type: Boolean,
         default: true,
+    },
+    userId:{
+        type:String,
+        required: true,
+        ref: 'User', 
     }
 },{
     timestamps: true,

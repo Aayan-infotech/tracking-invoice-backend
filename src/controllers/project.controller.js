@@ -5,9 +5,9 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import Task from "../models/task.model.js";
 import AssignTask from "../models/assignTask.model.js";
 import QualityAssurance from "../models/qualityAssurance.model.js";
-import { assign } from "nodemailer/lib/shared/index.js";
 import Attendance from "../models/attendance.model.js";
 import { isValidObjectId } from "../utils/isValidObjectId.js";
+import mongoose from "mongoose";
 
 
 const getAllProjects = asyncHandler(async (req, res) => {
@@ -637,24 +637,50 @@ const getMyProjects = asyncHandler(async (req, res) => {
 });
 
 
-
 const getDocumentType = asyncHandler(async (req, res) => {
-    throw new ApiError(501, 'This endpoint is not implemented yet');
-    // console.log('Fetching document types for project');
-    // console.log(req.query);
-    // const { projectId } = req.query;
-    // console.log('Project ID:', projectId);
-    // if (!projectId) {
-    //     throw new ApiError(400, 'Project ID is required');
-    // }
+    const { projectId } = req.query;
+    if (!isValidObjectId(projectId)) {
+        throw new ApiError(400, 'Invalid project ID');
+    }
+    const aggregation = [];
+    aggregation.push({
+        $match: { projectId: new mongoose.Types.ObjectId(projectId) }
+    });
 
-    // const qualityAssurances = await QualityAssurance.find({ projectId }).select('documentName _id ').sort({ createdAt: -1 });
+    aggregation.push({
+        $project: {
+            _id: 1,
+            documentName: 1,
+            typeOfDocument: 1
+        }
+    });
+    aggregation.push({
+        $sort: { createdAt: -1 }
+    });
 
-    // res.status(200).json(new ApiResponse(200, 'Document types fetched successfully', qualityAssurances));
+
+    const documentTypes = await QualityAssurance.aggregate(aggregation);
+    if (!documentTypes || documentTypes.length === 0) {
+        throw new ApiError(404, 'No documents found for this project');
+    }
+    res.status(200).json(new ApiResponse(200, 'Document types fetched successfully', documentTypes));
 });
 
 
+const getDocDetails = asyncHandler(async (req, res) => {
+    const { docId } = req.params;
+    if (!isValidObjectId(docId)) {
+        throw new ApiError(400, 'Invalid document ID');
+    }
+
+const docDetails = await QualityAssurance.findById(docId).select('documentName documentHtml typeOfDocument');
+   if (!docDetails) {
+       throw new ApiError(404, 'Document details not found');
+   }
+   res.status(200).json(new ApiResponse(200, 'Document details fetched successfully', docDetails));
+});
+
 export {
     getAllProjects, addProject, updateProject, deleteProject, getAllTasks, addTask, getProjectDropDown, updateTask, deleteTask, getAllTaskofProject, getAssignTasks, assignTask, updateAssignTask, deleteAssignedTask, getQualityAssurance, addQualityAssurance, updateQualityAssurance, deleteQualityAssurance, clockIn, getProjectDetails,
-    getMyProjects, getDocumentType
+    getMyProjects, getDocumentType, getDocDetails
 };

@@ -3,7 +3,8 @@ import { validateRequest } from "../middlewares/validation.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { getAllProjects, addProject, updateProject, deleteProject, addTask, getAllTasks, getProjectDropDown, updateTask, deleteTask, getAllTaskofProject, getAssignTasks, assignTask, updateAssignTask, deleteAssignedTask, getQualityAssurance, addQualityAssurance, updateQualityAssurance, deleteQualityAssurance, clockIn, getProjectDetails,
     getMyProjects,
-    getDocumentType
+    getDocumentType,
+    getDocDetails
  } from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { projectSchema, taskSchema, assignTaskSchema, qualityAssuranceSchema, clockInSchema } from "../validators/projectValidator.js";
@@ -41,7 +42,8 @@ router.delete('/quality-assurance/:qaId', verifyJWT, deleteQualityAssurance);
 // mobile 
 router.get('/my-projects',verifyJWT,getMyProjects);
 router.post('/clock-in', verifyJWT, validateRequest(clockInSchema), clockIn);
-router.get('/:projectId', verifyJWT, getProjectDetails);
-router.get('/get-document-type', verifyJWT, getDocumentType);
+router.get('/project-details/:projectId', verifyJWT, getProjectDetails);
+router.get('/document-type', verifyJWT, getDocumentType);
+router.get('/doc-details/:docId', verifyJWT, getDocDetails);
 
 export default router;

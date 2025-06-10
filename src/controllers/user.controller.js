@@ -222,6 +222,23 @@ const getDashboard = asyncHandler(async (req, res) => {
   );
 });
 
+const securitySetting = asyncHandler( async (req, res) =>{
+  const user = req.user;
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // 
+
+  res.json(
+    new ApiResponse(200, "Security settings fetched successfully", {
+      is2FAEnabled: user.is2FAEnabled,
+      profile_image: user.profile_image,
+    })
+  );
+
+});
+
 export {
   getAllUsers,
   updateUserDetails,
@@ -229,5 +246,6 @@ export {
   getProfile,
   updateProfile,
   getAllVerifiedUsers,
-  getDashboard
+  getDashboard,
+  securitySetting
 };
