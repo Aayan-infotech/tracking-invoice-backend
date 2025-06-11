@@ -41,6 +41,15 @@ const taskSchema = new mongoose.Schema({
         type: String,
         required: false
     }],
+    updateBy: {
+        type: String,
+        required: true,
+        ref: 'User'
+    },
+    invoiceUrl: {
+        type: String,
+        required: false
+    },
 }, {
     timestamps: true,
     versionKey: false

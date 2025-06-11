@@ -1,13 +1,44 @@
 import { Router } from "express";
 import { validateRequest } from "../middlewares/validation.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import { getAllProjects, addProject, updateProject, deleteProject, addTask, getAllTasks, getProjectDropDown, updateTask, deleteTask, getAllTaskofProject, getAssignTasks, assignTask, updateAssignTask, deleteAssignedTask, getQualityAssurance, addQualityAssurance, updateQualityAssurance, deleteQualityAssurance, clockIn, getProjectDetails,
+import {
+    getAllProjects,
+    addProject,
+    updateProject,
+    deleteProject,
+    addTask,
+    getAllTasks,
+    getProjectDropDown,
+    updateTask,
+    deleteTask,
+    getAllTaskofProject,
+    getAssignTasks,
+    assignTask,
+    updateAssignTask,
+    deleteAssignedTask,
+    getQualityAssurance,
+    addQualityAssurance,
+    updateQualityAssurance,
+    deleteQualityAssurance,
+    clockIn,
+    getProjectDetails,
     getMyProjects,
     getDocumentType,
-    getDocDetails
- } from "../controllers/project.controller.js";
+    getDocDetails,
+    taskCompletionUpdate,
+    getTaskDetails,
+    getAllInvoicesProject,
+} from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
-import { projectSchema, taskSchema, assignTaskSchema, qualityAssuranceSchema, clockInSchema } from "../validators/projectValidator.js";
+import {
+    projectSchema,
+    taskSchema,
+    assignTaskSchema,
+    qualityAssuranceSchema,
+    clockInSchema,
+    taskUpdateSchema
+} from "../validators/projectValidator.js";
+import errorHandler from "../middlewares/errorhandler.middleware.js";
 
 
 
@@ -15,8 +46,8 @@ const router = Router();
 
 router.get('/', verifyJWT, getAllProjects);
 router.post('/', verifyJWT, validateRequest(projectSchema), addProject);
-router.put('/:projectId', verifyJWT, validateRequest(projectSchema), updateProject);
-router.delete('/:projectId', verifyJWT, deleteProject);
+router.put('/update/:projectId', verifyJWT, validateRequest(projectSchema), updateProject);
+router.delete('/delete/:projectId', verifyJWT, deleteProject);
 router.get('/project-dropdown', verifyJWT, getProjectDropDown);
 
 // Task
@@ -40,10 +71,18 @@ router.delete('/quality-assurance/:qaId', verifyJWT, deleteQualityAssurance);
 
 
 // mobile 
-router.get('/my-projects',verifyJWT,getMyProjects);
+router.get('/my-projects', verifyJWT, getMyProjects);
 router.post('/clock-in', verifyJWT, validateRequest(clockInSchema), clockIn);
 router.get('/project-details/:projectId', verifyJWT, getProjectDetails);
 router.get('/document-type', verifyJWT, getDocumentType);
 router.get('/doc-details/:docId', verifyJWT, getDocDetails);
+router.get('/task-details/:taskId', verifyJWT, getTaskDetails);
+router.put('/task-completion-update', verifyJWT, upload.fields([
+    {
+        name: "taskUpdateFile",
+        maxCount: 5,
+    },
+]), errorHandler, validateRequest(taskUpdateSchema), taskCompletionUpdate);
+router.get('/get-invoice',verifyJWT,getAllInvoicesProject);
 
 export default router;

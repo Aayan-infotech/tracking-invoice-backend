@@ -111,4 +111,21 @@ const clockInSchema = joi.object({
         'any.required': 'Longitude is required',
     }),
 });
-export { projectSchema, taskSchema, assignTaskSchema, qualityAssuranceSchema, clockInSchema };
+
+const taskUpdateSchema = joi.object({
+    taskId: joi.string().required().messages({
+        'string.base': 'Task ID must be a string',
+        'string.empty': 'Task ID cannot be empty',
+        'any.required': 'Task ID is required',
+    }),
+    status: joi.string().valid('pending', 'in progress', 'completed').required().messages({
+        'string.base': 'Status must be a string',
+        'any.only': 'Status must be one of the following: pending, in progress, completed',
+        'any.required': 'Status is required',
+    }),
+    taskUpdateDescription: joi.string().max(1000).optional().messages({
+        'string.base': 'Task update description must be a string',
+        'string.max': 'Task update description must not exceed 1000 characters',
+    }),
+});
+export { projectSchema, taskSchema, assignTaskSchema, qualityAssuranceSchema, clockInSchema, taskUpdateSchema };

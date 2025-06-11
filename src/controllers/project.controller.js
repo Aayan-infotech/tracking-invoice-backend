@@ -8,6 +8,11 @@ import QualityAssurance from "../models/qualityAssurance.model.js";
 import Attendance from "../models/attendance.model.js";
 import { isValidObjectId } from "../utils/isValidObjectId.js";
 import mongoose from "mongoose";
+import { uploadImage } from "../utils/awsS3Utils.js";
+import taskUpdateHistoryModel from "../models/taskUpdateHistory.model.js";
+import generateInvoice from "../services/generateInvoice.js";
+import fs from 'fs';
+import Invoice from "../models/Invoices.model.js";
 
 
 const getAllProjects = asyncHandler(async (req, res) => {
@@ -673,14 +678,216 @@ const getDocDetails = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid document ID');
     }
 
-const docDetails = await QualityAssurance.findById(docId).select('documentName documentHtml typeOfDocument');
-   if (!docDetails) {
-       throw new ApiError(404, 'Document details not found');
-   }
-   res.status(200).json(new ApiResponse(200, 'Document details fetched successfully', docDetails));
+    const docDetails = await QualityAssurance.findById(docId).select('documentName documentHtml typeOfDocument');
+    if (!docDetails) {
+        throw new ApiError(404, 'Document details not found');
+    }
+    res.status(200).json(new ApiResponse(200, 'Document details fetched successfully', docDetails));
+});
+
+const taskCompletionUpdate = asyncHandler(async (req, res) => {
+    const { taskId, taskUpdateDescription, status } = req.body;
+    if (!isValidObjectId(taskId)) {
+        throw new ApiError(400, 'Invalid task ID');
+    }
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+        throw new ApiError(404, 'Task not found');
+    }
+    if (task.status === 'completed') {
+        throw new ApiError(400, 'Task is already completed');
+    }
+
+    const project = await Project.findById(task.projectId);
+    if (!project) {
+        throw new ApiError(404, 'Project not found');
+    }
+
+    const uploadImages = [];
+    if (req.files && req.files.taskUpdateFile && req.files.taskUpdateFile.length > 0) {
+        for (const file of req.files.taskUpdateFile) {
+            const uploadResult = await uploadImage(file);
+            if (uploadResult.success) {
+                uploadImages.push(uploadResult.fileUrl);
+            } else {
+                throw new ApiError(500, 'Failed to upload image');
+            }
+        }
+    }
+
+    // Created a Task Update History
+    const taskUpdateHistory = await taskUpdateHistoryModel({
+        taskId: task._id,
+        updateDescription: taskUpdateDescription,
+        status,
+        updatePhotos: uploadImages,
+        updatedBy: req.user.userId
+    });
+    await taskUpdateHistory.save();
+
+    if (status === 'completed') {
+        const invoiceData = {
+            projectName: project.projectName || 'Unknown Project',
+            taskName: task.taskName,
+            date: new Date().toLocaleDateString(),
+            invoiceNumber: `INV-${task._id}`,
+            items: [
+                { name: task.taskName, quantity: 1, price: task.amount },
+            ],
+        };
+
+        const s3Url = await generateInvoice(invoiceData, `invoices/INV-${task._id}.pdf`);
+
+        // Save the Invoice to Database
+        const invoice = await Invoice.create({
+            invoiceNumber: `INV-${task._id}`,
+            userId: req.user.userId,
+            projectId: task.projectId,
+            taskId: task._id,
+            invoiceUrl: s3Url,
+            amount: task.amount,
+            status: 'unpaid',
+            InvoiceDate: new Date(),
+            invoiceType: 'task'
+        });
+
+        if (!invoice) {
+            throw new ApiError(500, 'Failed to create invoice');
+        }
+
+        task.invoiceUrl = s3Url;
+    }
+
+    task.status = status;
+    task.taskUpdateDescription = taskUpdateDescription;
+    task.taskUpdatePhotos = uploadImages;
+    task.updateBy = req.user.userId;
+
+    const updatedTask = await task.save();
+    if (!updatedTask) {
+        throw new ApiError(500, 'Failed to update task');
+    }
+
+    return res.status(200).json(new ApiResponse(200, 'Task updated successfully', updatedTask));
+});
+
+
+const getTaskDetails = asyncHandler(async (req, res) => {
+    const taskId = req.params.taskId;
+    if (!isValidObjectId(taskId)) {
+        throw new ApiError(400, 'Invalid task ID');
+    }
+
+    const task = await Task.findById(taskId).select('-taskUpdatePhotos -createdAt -updatedAt');
+    if (!task) {
+        throw new ApiError(404, 'Task not found');
+    }
+
+    return res.status(200).json(new ApiResponse(200, 'Task details fetched successfully', task));
+});
+
+
+const getAllInvoicesProject = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const status = req.query.status || 'all';
+    if (status !== 'all' && !['unpaid', 'paid', 'draft'].includes(status)) {
+        throw new ApiError(400, 'Invalid status');
+    }
+
+    const aggregation = [];
+    aggregation.push({
+        $match: {
+            invoiceType: 'project',
+            status: status === 'all' ? { $ne: null } : status
+        }
+    });
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            invoices: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        invoiceNumber: 1,
+                        userId: 1,
+                        projectId: "$projectDetails._id",
+                        projectName: "$projectDetails.projectName",
+                        taskId: 1,
+                        invoiceUrl: 1,
+                        amount: 1,
+                        status: 1,
+                        InvoiceDate: 1
+                    }
+                },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+    const result = await Invoice.aggregate(aggregation);
+    const invoices = result[0].invoices;
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+
+    return res.status(200).json(new ApiResponse(200,
+        invoices.length > 0 ? "Fetched all project invoices successfully" : "No project invoices found",
+        invoices.length > 0 ? {
+            invoices,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
 });
 
 export {
-    getAllProjects, addProject, updateProject, deleteProject, getAllTasks, addTask, getProjectDropDown, updateTask, deleteTask, getAllTaskofProject, getAssignTasks, assignTask, updateAssignTask, deleteAssignedTask, getQualityAssurance, addQualityAssurance, updateQualityAssurance, deleteQualityAssurance, clockIn, getProjectDetails,
-    getMyProjects, getDocumentType, getDocDetails
+    getAllProjects,
+    addProject,
+    updateProject,
+    deleteProject,
+    getAllTasks,
+    addTask,
+    getProjectDropDown,
+    updateTask,
+    deleteTask,
+    getAllTaskofProject,
+    getAssignTasks,
+    assignTask,
+    updateAssignTask,
+    deleteAssignedTask,
+    getQualityAssurance,
+    addQualityAssurance,
+    updateQualityAssurance,
+    deleteQualityAssurance,
+    clockIn,
+    getProjectDetails,
+    getMyProjects,
+    getDocumentType,
+    getDocDetails,
+    taskCompletionUpdate,
+    getTaskDetails,
+    getAllInvoicesProject
 };
