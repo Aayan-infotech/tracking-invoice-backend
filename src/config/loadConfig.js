@@ -8,7 +8,7 @@ dotenv.config();
 
 const ENV = process.env.NODE_ENV || "production";
 const REGION = process.env.AWS_REGION || "us-east-1";
-const SECRET_NAME = "invoice"|| "invoice";
+const SECRET_NAME = process.env.SECRET_NAME || "social-ecomm";
 const secretsManager = new SecretsManagerClient({ region: REGION });
 
 const loadConfig = async () => {
@@ -17,6 +17,11 @@ const loadConfig = async () => {
       const response = await secretsManager.send(
         new GetSecretValueCommand({ SecretId: SECRET_NAME })
       );
+
+      console.log("AWS Secrets Manager response:", response);
+      console.log("AWS Secrets Manager response type:", typeof response.SecretString);
+      const secrets = JSON.parse(response.SecretString);
+      console.log("Parsed secrets:", secrets);
 
       if (response.SecretString) {
         try {
