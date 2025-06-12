@@ -27,7 +27,7 @@ async function generateInvoice(invoiceData, s3Key) {
 
         doc
             .text(`Project Name: ${invoiceData.projectName}`, 50, 180)
-            .text(`Task Name: ${invoiceData.taskName}`, 50, 195)
+            .text(`Task Name: ${invoiceData.taskName ? invoiceData.taskName : 'N/A'}`, 50, 195)
             .text(`Date: ${invoiceData.date}`, 50, 210)
             .text(`Invoice #: ${invoiceData.invoiceNumber}`, 50, 225)
             .moveDown();

@@ -23,6 +23,11 @@ const taskSchema = new mongoose.Schema({
         required: true,
         min: 0
     },
+    taskQuantity: {
+        type: Number,
+        required: true,
+        min: 1
+    },
     projectId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Project',
@@ -43,7 +48,7 @@ const taskSchema = new mongoose.Schema({
     }],
     updateBy: {
         type: String,
-        required: true,
+        required: false,
         ref: 'User'
     },
     invoiceUrl: {

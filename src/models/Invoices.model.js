@@ -1,12 +1,12 @@
 import mongoose from "mongoose";
 
 const invoiceSchema = new mongoose.Schema({
-    invoiceNumber:{
-        type:String,
+    invoiceNumber: {
+        type: String,
         required: true,
         unique: true,
     },
-    userId:{
+    userId: {
         type: String,
         ref: 'User',
         required: true
@@ -16,12 +16,14 @@ const invoiceSchema = new mongoose.Schema({
         ref: 'Project',
         required: true
     },
-    taskId:{
+    taskId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Task',
-        required: true
+        required: function () {
+            return this.invoiceType === 'task';
+        }
     },
-    invoiceUrl:{
+    invoiceUrl: {
         type: String,
         required: true,
     },
@@ -35,16 +37,16 @@ const invoiceSchema = new mongoose.Schema({
         enum: ['unpaid', 'paid', 'draft'],
         default: 'unpaid'
     },
-    InvoiceDate:{
-        type:Date,
+    InvoiceDate: {
+        type: Date,
         required: true,
     },
-    invoiceType:{
-        type:String,
+    invoiceType: {
+        type: String,
         enum: ['task', 'project'],
         required: true,
     }
-},{
+}, {
     timestamps: true,
     versionKey: false
 });

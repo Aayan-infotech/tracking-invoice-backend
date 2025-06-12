@@ -54,6 +54,11 @@ const taskSchema = joi.object({
         'number.min': 'Amount must be at least 0',
         'any.required': 'Amount is required',
     }),
+    taskQuantity: joi.number().min(1).required().messages({
+        'number.base': 'Task quantity must be a number',
+        'number.min': 'Task quantity must be at least 1',
+        'any.required': 'Task quantity is required',
+    }),
     projectId: joi.string().required().messages({
         'string.base': 'Project ID must be a string',
         'string.empty': 'Project ID cannot be empty',

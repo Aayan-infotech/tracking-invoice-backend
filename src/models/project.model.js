@@ -24,6 +24,10 @@ const projectSchema = new mongoose.Schema({
         enum: ['active', 'completed', 'on hold', 'cancelled'],
         default: 'active',
     },
+    invoiceUrl: {
+        type: String,
+        required: false,
+    },
 });
 
 const Project = mongoose.model('Project', projectSchema);

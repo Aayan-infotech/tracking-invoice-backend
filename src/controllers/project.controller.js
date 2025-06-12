@@ -80,13 +80,93 @@ const addProject = asyncHandler(async (req, res) => {
 const updateProject = asyncHandler(async (req, res) => {
     const projectId = req.params.projectId;
     const { projectName, description, startDate, endDate, status } = req.body;
-    const updatedProject = await Project.findByIdAndUpdate(projectId, {
-        projectName,
-        description,
-        startDate,
-        endDate,
-        status
-    }, { new: true });
+
+    if (!isValidObjectId(projectId)) {
+        throw new ApiError(400, 'Invalid project ID');
+    }
+    const project = await Project.findById(projectId);
+    if (!project) {
+        throw new ApiError(404, 'Project not found');
+    }
+
+    if (project.status === 'completed') {
+        throw new ApiError(400, 'Cannot update a completed project');
+    }
+
+
+
+    if (status === 'completed') {
+        const aggregation = [];
+        aggregation.push({
+            $match: {
+                projectId: new mongoose.Types.ObjectId(projectId),
+                status: 'completed'
+            }
+        });
+
+        aggregation.push({
+            $addFields: {
+                quantity: 1
+            }
+        });
+        aggregation.push({
+            $project: {
+                name: "$taskName",
+                quantity: "$quantity",
+                price: "$amount"
+            }
+        });
+
+        const getAllCompletedTasks = await Task.aggregate(aggregation);
+
+        console.log(getAllCompletedTasks);
+
+
+        if (getAllCompletedTasks.length === 0) {
+            throw new ApiError(400, 'Cannot mark project as completed without any completed tasks');
+        }
+
+
+        const invoiceData = {
+            projectName: project.projectName || 'Unknown Project',
+            // taskName: task.taskName,
+            date: new Date().toLocaleDateString(),
+            invoiceNumber: `INVP-${project._id}`,
+            items: getAllCompletedTasks
+        };
+
+        const s3Url = await generateInvoice(invoiceData, `invoices/INVP-${project._id}.pdf`);
+
+        // Save the Invoice to Database
+        const invoice = await Invoice.create({
+            invoiceNumber: `INVP-${project._id}`,
+            userId: req.user.userId,
+            projectId: project._id,
+            invoiceUrl: s3Url,
+            amount: 0,
+            status: 'unpaid',
+            InvoiceDate: new Date(),
+            invoiceType: 'project'
+        });
+
+        if (!invoice) {
+            throw new ApiError(500, 'Failed to create invoice');
+        }
+
+        project.invoiceUrl = s3Url;
+
+    }
+
+
+    project.projectName = projectName;
+    project.description = description;
+    project.startDate = startDate;
+    project.endDate = endDate;
+    project.status = status;
+    const updatedProject = await project.save();
+    if (!updatedProject) {
+        throw new ApiError(500, 'Failed to update project');
+    }
 
     return res.status(200).json(new ApiResponse(200, "Project updated successfully", updatedProject));
 });
@@ -157,9 +237,9 @@ const getAllTasks = asyncHandler(async (req, res) => {
 });
 
 const addTask = asyncHandler(async (req, res) => {
-    const { projectId, taskName, amount, description } = req.body;
+    const { projectId, taskName, amount, description , taskQuantity } = req.body;
 
-    if (!projectId || !taskName || !amount) {
+    if (!projectId || !taskName || !amount || !taskQuantity) {
         throw new ApiError(400, 'Missing required fields');
     }
 
@@ -174,6 +254,7 @@ const addTask = asyncHandler(async (req, res) => {
         projectId,
         taskName,
         amount,
+        taskQuantity,
         description,
     });
 
@@ -186,14 +267,33 @@ const addTask = asyncHandler(async (req, res) => {
 
 const updateTask = asyncHandler(async (req, res) => {
     const taskId = req.params.taskId;
-    const { projectId, taskName, description, status, amount } = req.body;
+    const { projectId, taskName, description, status, amount , taskQuantity } = req.body;
+
+    if (!isValidObjectId(taskId)) {
+        throw new ApiError(400, 'Invalid task ID');
+    }
+
+    const existingTask = await Task.findById(taskId);
+    if (!existingTask) {
+        throw new ApiError(404, 'Task not found');
+    }
+
+    if (existingTask.status === 'completed') {
+        throw new ApiError(400, 'Cannot update a completed task');
+    }
+
+    const duplicateTask = await Task.findOne({ _id: { $ne: taskId }, projectId, taskName });
+    if (duplicateTask) {
+        throw new ApiError(409, 'Task with the same name already exists in this project');
+    }
 
     const updatedTask = await Task.findByIdAndUpdate(taskId, {
         projectId,
         taskName,
         description,
         status,
-        amount
+        amount,
+        taskQuantity
     }, { new: true });
 
     if (!updatedTask) {
@@ -326,16 +426,27 @@ const assignTask = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Missing required fields');
     }
 
-    // Check if the task is already assigned to the user in the project
-    const existingAssignment = await AssignTask.findOne({ taskId, projectId, userId });
-    if (existingAssignment) {
-        throw new ApiError(400, 'Task is already assigned to the user in the project');
+    if (!isValidObjectId(taskId)) {
+        throw new ApiError(400, 'Invalid task ID');
     }
 
-    const newAssignment = new AssignTask({ taskId, projectId, userId });
-    await newAssignment.save();
+    const task = await Task.findById(taskId);
 
-    res.status(201).json(new ApiResponse(201, 'Task assigned successfully', newAssignment));
+    if (!task) {
+        throw new ApiError(404, 'Task not found');
+    }
+
+    if (task.assignedTo) {
+        throw new ApiError(400, 'Task is already assigned to a user');
+    }
+
+    task.assignedTo = userId;
+    const status = await task.save();
+    if (!status) {
+        throw new ApiError(500, 'Failed to assign task');
+    }
+
+    res.status(201).json(new ApiResponse(201, 'Task assigned successfully', status));
 });
 
 
@@ -798,9 +909,14 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid status');
     }
 
+    const assignedProjects = await AssignTask.find({ userId: req.user.userId }).select('projectId');
+    const projectIds = assignedProjects.map(assignment => assignment.projectId);
+    console.log(projectIds);
+
     const aggregation = [];
     aggregation.push({
         $match: {
+            projectId: { $in: projectIds },
             invoiceType: 'project',
             status: status === 'all' ? { $ne: null } : status
         }
@@ -829,12 +945,10 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
                     $project: {
                         _id: 1,
                         invoiceNumber: 1,
-                        userId: 1,
                         projectId: "$projectDetails._id",
                         projectName: "$projectDetails.projectName",
                         taskId: 1,
                         invoiceUrl: 1,
-                        amount: 1,
                         status: 1,
                         InvoiceDate: 1
                     }
