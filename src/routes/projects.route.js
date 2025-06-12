@@ -28,6 +28,7 @@ import {
     taskCompletionUpdate,
     getTaskDetails,
     getAllInvoicesProject,
+    ProjectInvoices
 } from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
@@ -69,6 +70,9 @@ router.post('/quality-assurance', verifyJWT, validateRequest(qualityAssuranceSch
 router.put('/quality-assurance/:qaId', verifyJWT, validateRequest(qualityAssuranceSchema), updateQualityAssurance);
 router.delete('/quality-assurance/:qaId', verifyJWT, deleteQualityAssurance);
 
+// Project Invoice
+router.get('/invoice',verifyJWT,ProjectInvoices);
+
 
 // mobile 
 router.get('/my-projects', verifyJWT, getMyProjects);
@@ -84,5 +88,7 @@ router.put('/task-completion-update', verifyJWT, upload.fields([
     },
 ]), errorHandler, validateRequest(taskUpdateSchema), taskCompletionUpdate);
 router.get('/get-invoice',verifyJWT,getAllInvoicesProject);
+
+
 
 export default router;

@@ -119,9 +119,6 @@ const updateProject = asyncHandler(async (req, res) => {
 
         const getAllCompletedTasks = await Task.aggregate(aggregation);
 
-        console.log(getAllCompletedTasks);
-
-
         if (getAllCompletedTasks.length === 0) {
             throw new ApiError(400, 'Cannot mark project as completed without any completed tasks');
         }
@@ -140,7 +137,6 @@ const updateProject = asyncHandler(async (req, res) => {
         // Save the Invoice to Database
         const invoice = await Invoice.create({
             invoiceNumber: `INVP-${project._id}`,
-            userId: req.user.userId,
             projectId: project._id,
             invoiceUrl: s3Url,
             amount: 0,
@@ -237,7 +233,7 @@ const getAllTasks = asyncHandler(async (req, res) => {
 });
 
 const addTask = asyncHandler(async (req, res) => {
-    const { projectId, taskName, amount, description , taskQuantity } = req.body;
+    const { projectId, taskName, amount, description, taskQuantity } = req.body;
 
     if (!projectId || !taskName || !amount || !taskQuantity) {
         throw new ApiError(400, 'Missing required fields');
@@ -267,7 +263,7 @@ const addTask = asyncHandler(async (req, res) => {
 
 const updateTask = asyncHandler(async (req, res) => {
     const taskId = req.params.taskId;
-    const { projectId, taskName, description, status, amount , taskQuantity } = req.body;
+    const { projectId, taskName, description, status, amount, taskQuantity } = req.body;
 
     if (!isValidObjectId(taskId)) {
         throw new ApiError(400, 'Invalid task ID');
@@ -706,15 +702,21 @@ const getMyProjects = asyncHandler(async (req, res) => {
             $match: { userId: userId }
         },
         {
+            $group: {
+                _id: "$projectId"
+            }
+        },
+        {
             $lookup: {
                 from: "projects",
-                localField: "projectId",
+                localField: "_id",
                 foreignField: "_id",
                 as: "projectDetails"
             }
         },
         {
-            $unwind: "$projectDetails"
+            $unwind: "$projectDetails",
+
         },
         {
             $replaceRoot: { newRoot: "$projectDetails" }
@@ -738,6 +740,8 @@ const getMyProjects = asyncHandler(async (req, res) => {
     ];
 
     const result = await AssignTask.aggregate(aggregation);
+
+    console.log(result);
 
     const projects = result[0]?.data || [];
     const total = result[0]?.total || 0;
@@ -909,9 +913,28 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid status');
     }
 
-    const assignedProjects = await AssignTask.find({ userId: req.user.userId }).select('projectId');
-    const projectIds = assignedProjects.map(assignment => assignment.projectId);
-    console.log(projectIds);
+    const aggregationTask = [];
+
+    aggregationTask.push({
+        $match: {
+            userId: req.user.userId
+        }
+    });
+    aggregationTask.push({
+        $group:{
+            _id: "$projectId",
+        }
+    });
+    aggregationTask.push({
+        $project:{
+            _id: 0,
+            projectId: "$_id"
+        }
+    }); 
+
+    const assignedProject = await AssignTask.aggregate(aggregationTask);
+    const projectIds = assignedProject.map(item => item.projectId);
+
 
     const aggregation = [];
     aggregation.push({
@@ -977,6 +1000,74 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
     ));
 });
 
+const ProjectInvoices = asyncHandler(async (req, res) =>{
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const aggregation = [];
+    aggregation.push({
+        $match:{
+            invoiceType: 'project',
+        }
+    });
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            invoices: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        invoiceNumber: 1,
+                        projectId: "$projectDetails._id",
+                        projectName: "$projectDetails.projectName",
+                        invoiceUrl: 1,
+                        status: 1,
+                        InvoiceDate: 1
+                    }
+                },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+
+    const result = await Invoice.aggregate(aggregation);
+    const invoices = result[0].invoices;
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+
+    return res.status(200).json(new ApiResponse(200,
+        invoices.length > 0 ? "Fetched all project invoices successfully" : "No project invoices found",
+        invoices.length > 0 ? {
+            invoices,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+});
+
 export {
     getAllProjects,
     addProject,
@@ -1003,5 +1094,6 @@ export {
     getDocDetails,
     taskCompletionUpdate,
     getTaskDetails,
-    getAllInvoicesProject
+    getAllInvoicesProject,
+    ProjectInvoices
 };
