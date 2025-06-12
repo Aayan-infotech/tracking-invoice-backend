@@ -19,6 +19,9 @@ const getAllUsers = asyncHandler(async (req, res) => {
   aggregation.push({
     $match: { role: "user" },
   });
+  aggregation.push({
+    $sort: { createdAt: -1 },
+  });
 
   aggregation.push({
     $facet: {
@@ -30,6 +33,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
       totalCount: [{ $count: "count" }],
     },
   });
+
 
   const result = await User.aggregate(aggregation);
   const users = result[0].users;
@@ -155,7 +159,7 @@ const getProfile = asyncHandler(async (req, res) => {
       email: user.email,
       mobile: user.mobile,
       address: user.address,
-      profile_image: user.profile_image,
+      profile_image: user.profile_image ?? `${process.env.APP_URL}/placeholder/person.png`,  
       is2FAEnabled: user.is2FAEnabled,
     })
   );
@@ -223,7 +227,7 @@ const getDashboard = asyncHandler(async (req, res) => {
   );
 });
 
-const securitySetting = asyncHandler( async (req, res) =>{
+const securitySetting = asyncHandler(async (req, res) => {
   const user = req.user;
   if (!user) {
     throw new ApiError(404, "User not found");

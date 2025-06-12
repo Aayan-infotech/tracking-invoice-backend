@@ -46,7 +46,7 @@ const register = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
   let userEmail = email.toLowerCase();
-  const existingUser = await User.findOne({ email: userEmail });
+  const existingUser = await User.findOne({ email: userEmail, isVerified: true });
 
   if (existingUser) {
     throw new ApiError(400, "User already exists with this email");
@@ -74,38 +74,72 @@ const register = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to send OTP to Email");
   }
 
-  const user = new User({
-    userId,
-    email: userEmail,
-    username,
-    otp,
-    otpExpire: new Date(Date.now() + 10 * 60 * 1000),
-  });
+  const existingUserVerified = await User.findOne({ email: userEmail });
+  if (!existingUserVerified) {
+    const user = new User({
+      userId,
+      email: userEmail,
+      username,
+      otp,
+      otpExpire: new Date(Date.now() + 10 * 60 * 1000),
+    });
 
-  await user.save();
+    await user.save();
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-    user._id
-  );
 
-  // check if user is created
-  const createdUser = await User.findById(user._id).select(
-    "-password -refreshToken -otp -otpExpire -refreshToken"
-  );
 
-  if (!createdUser) {
-    throw new ApiError(500, "Something went wrong while registering");
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      user._id
+    );
+
+    // check if user is created
+    const createdUser = await User.findById(user._id).select(
+      "-password -refreshToken -otp -otpExpire -refreshToken"
+    );
+
+    if (!createdUser) {
+      throw new ApiError(500, "Something went wrong while registering");
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          "User registered successfully, Please Check Email to Verify you mail...!!!",
+          { user: createdUser, accessToken, refreshToken }
+        )
+      );
+
+  } else {
+
+    existingUserVerified.otp = otp;
+    existingUserVerified.otpExpire = new Date(Date.now() + 10 * 60 * 1000);
+    await existingUserVerified.save();
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      existingUserVerified._id
+    );
+    const updatedUser = await User.findById(existingUserVerified._id).select(
+      "-password -refreshToken -otp -otpExpire -refreshToken"
+    );
+
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          "User registered successfully, Please Check Email to Verify you mail...!!!",
+          { user: updatedUser, accessToken, refreshToken }
+        )
+      );
+
+    
   }
 
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        "User registered successfully, Please Check Email to Verify you mail...!!!",
-        { user: createdUser, accessToken, refreshToken }
-      )
-    );
+
+
 });
 
 const loginUser = asyncHandler(async (req, res) => {
