@@ -741,7 +741,6 @@ const getMyProjects = asyncHandler(async (req, res) => {
 
     const result = await AssignTask.aggregate(aggregation);
 
-    console.log(result);
 
     const projects = result[0]?.data || [];
     const total = result[0]?.total || 0;
@@ -921,16 +920,16 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
         }
     });
     aggregationTask.push({
-        $group:{
+        $group: {
             _id: "$projectId",
         }
     });
     aggregationTask.push({
-        $project:{
+        $project: {
             _id: 0,
             projectId: "$_id"
         }
-    }); 
+    });
 
     const assignedProject = await AssignTask.aggregate(aggregationTask);
     const projectIds = assignedProject.map(item => item.projectId);
@@ -1000,14 +999,14 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
     ));
 });
 
-const ProjectInvoices = asyncHandler(async (req, res) =>{
+const ProjectInvoices = asyncHandler(async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, parseInt(req.query.limit) || 10);
     const skip = (page - 1) * limit;
 
     const aggregation = [];
     aggregation.push({
-        $match:{
+        $match: {
             invoiceType: 'project',
         }
     });
@@ -1068,6 +1067,183 @@ const ProjectInvoices = asyncHandler(async (req, res) =>{
     ));
 });
 
+const updateInvoiceStatus = asyncHandler(async (req, res) => {
+    const { invoiceId, status } = req.body;
+
+    if (!isValidObjectId(invoiceId)) {
+        throw new ApiError(404, "Invalid Invoice Id");
+    }
+
+    const aggregation = [];
+    aggregation.push({
+        $match: {
+            _id: new mongoose.Types.ObjectId(invoiceId),
+        }
+    });
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $project: {
+            _id: 1,
+            invoiceNumber: 1,
+            projectId: "$projectDetails._id",
+            projectName: "$projectDetails.projectName",
+            invoiceUrl: 1,
+            status: 1,
+            InvoiceDate: 1
+        }
+    });
+    const invoice = await Invoice.aggregate(aggregation);
+
+    if (!invoice || invoice.length === 0) {
+        throw new ApiError(404, "Invoice not found");
+    }
+
+    if (!['paid', 'unpaid', 'draft'].includes(status)) {
+        throw new ApiError(400, "Invalid status");
+    }
+
+    invoice[0].status = status;
+    const updatedInvoice = await Invoice.findByIdAndUpdate(invoice[0]._id, invoice[0], { new: true });
+
+    if (!updatedInvoice) {
+        throw new ApiError(500, "Failed to update invoice status");
+    }
+
+
+    return res.status(200).json(new ApiResponse(200, "Invoice status updated successfully", invoice[0]));
+});
+
+
+const getAllActivities = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const invoiceEndDate = req.query.invoiceEndDate ? new Date(req.query.invoiceEndDate) : new Date();
+    const invoiceDate = req.query.invoiceDate ? new Date(req.query.invoiceDate) : new Date();
+    if (isNaN(invoiceEndDate.getTime()) || isNaN(invoiceDate.getTime())) {
+        throw new ApiError(400, 'Invalid date format');
+    }
+    if (invoiceEndDate < invoiceDate) {
+        throw new ApiError(400, 'End date cannot be earlier than start date');
+    }
+
+    const aggregation = [];
+    aggregation.push({
+        $match: {
+            $expr: {
+                $and: [
+                    { $eq: ['$userId', req.user.userId] },
+                    { $eq: ['$invoiceType', 'task'] },
+                    {
+                        $gte: [
+                            { $dateToString: { format: "%Y-%m-%d", date: "$InvoiceDate" } },
+                            invoiceDate.toISOString().split('T')[0]
+                        ]
+                    },
+                    {
+                        $lte: [
+                            { $dateToString: { format: "%Y-%m-%d", date: "$InvoiceDate" } },
+                            invoiceEndDate.toISOString().split('T')[0]
+                        ]
+                    }
+                ]
+            }
+        }
+    });
+
+
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "taskDetails.projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            activities: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        taskId: "$taskDetails._id",
+                        taskName: "$taskDetails.taskName",
+                        projectId: "$projectDetails._id",
+                        projectName: "$projectDetails.projectName",
+                        invoiceNumber: 1,
+                        invoiceUrl: 1,
+                        amount: 1,
+                        activityDescription: 1,
+                        createdAt: 1
+                    }
+                },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+
+    const result = await Invoice.aggregate(aggregation);
+    const activities = result[0].activities;
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    return res.status(200).json(new ApiResponse(200,
+        activities.length > 0 ? "Fetched all activities successfully" : "No activities found",
+        activities.length > 0 ? {
+            activities,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+
+
+});
+
+
 export {
     getAllProjects,
     addProject,
@@ -1095,5 +1271,7 @@ export {
     taskCompletionUpdate,
     getTaskDetails,
     getAllInvoicesProject,
-    ProjectInvoices
+    ProjectInvoices,
+    updateInvoiceStatus,
+    getAllActivities
 };

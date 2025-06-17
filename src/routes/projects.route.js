@@ -28,7 +28,9 @@ import {
     taskCompletionUpdate,
     getTaskDetails,
     getAllInvoicesProject,
-    ProjectInvoices
+    ProjectInvoices,
+    updateInvoiceStatus,
+    getAllActivities
 } from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
@@ -72,6 +74,7 @@ router.delete('/quality-assurance/:qaId', verifyJWT, deleteQualityAssurance);
 
 // Project Invoice
 router.get('/invoice',verifyJWT,ProjectInvoices);
+router.put('/update-invoice',verifyJWT,updateInvoiceStatus);
 
 
 // mobile 
@@ -87,7 +90,8 @@ router.put('/task-completion-update', verifyJWT, upload.fields([
         maxCount: 5,
     },
 ]), errorHandler, validateRequest(taskUpdateSchema), taskCompletionUpdate);
-router.get('/get-invoice',verifyJWT,getAllInvoicesProject);
+router.get('/get-invoice', verifyJWT, getAllInvoicesProject);
+router.get('/get-activity', verifyJWT, getAllActivities);
 
 
 

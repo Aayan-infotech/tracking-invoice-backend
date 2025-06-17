@@ -134,12 +134,7 @@ const register = asyncHandler(async (req, res) => {
           { user: updatedUser, accessToken, refreshToken }
         )
       );
-
-    
   }
-
-
-
 });
 
 const loginUser = asyncHandler(async (req, res) => {
@@ -194,7 +189,7 @@ const loginUser = asyncHandler(async (req, res) => {
     user._id
   );
 
-  const loggedInUser = await User.findById(user._id);
+  const loggedInUser = await User.findById(user._id).select("-password -otp -otpExpire -createdAt -updatedAt -refreshToken -__v");
 
   // cookies
   const options = {
