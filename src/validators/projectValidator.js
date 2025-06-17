@@ -101,9 +101,6 @@ const qualityAssuranceSchema = joi.object({
         'string.max': 'Document name must not exceed 100 characters',
         'any.required': 'Document name is required',
     }),
-    documentDescription: joi.string().optional().messages({
-        'string.base': 'Document description must be a string',
-    }),
 });
 
 const clockInSchema = joi.object({

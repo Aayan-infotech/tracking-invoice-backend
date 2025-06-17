@@ -532,14 +532,32 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
 
 
 const addQualityAssurance = asyncHandler(async (req, res) => {
-    const { projectId, documentName, documentDescription } = req.body;
+    const { projectId, documentName } = req.body;
+
+    const existdocument = await QualityAssurance.findOne({ projectId, documentName });
+    if (existdocument) {
+        throw new ApiError(400, 'Document already exists');
+    }
+
+    let documentFile = null;
+    if (req.files && req.files.documentFile) {
+        const file = req.files.documentFile[0];
+        const status = await uploadImage(file);
+        if (!status.success) {
+            throw new ApiError(500, 'Failed to upload document file');
+        }
+
+        documentFile = status.fileUrl;
+    } else {
+        throw new ApiError(400, 'Document file is required');
+    }
 
 
     const newQualityAssurance = new QualityAssurance({
         projectId,
         documentName,
-        documentHtml: documentDescription,
-        typeOfDocument: 'text',
+        documentFile: documentFile,
+        typeOfDocument: 'file',
     });
     await newQualityAssurance.save();
 
@@ -792,7 +810,7 @@ const getDocDetails = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid document ID');
     }
 
-    const docDetails = await QualityAssurance.findById(docId).select('documentName documentHtml typeOfDocument');
+    const docDetails = await QualityAssurance.findById(docId).select('documentName documentFile typeOfDocument');
     if (!docDetails) {
         throw new ApiError(404, 'Document details not found');
     }

@@ -68,7 +68,12 @@ router.delete('/assign-tasks/:assignmentId', verifyJWT, deleteAssignedTask);
 
 // Quality Assurance
 router.get('/quality-assurance', verifyJWT, getQualityAssurance);
-router.post('/quality-assurance', verifyJWT, validateRequest(qualityAssuranceSchema), addQualityAssurance);
+router.post('/quality-assurance', verifyJWT, upload.fields([
+    {
+      name: "documentFile",
+      maxCount: 1,
+    },
+  ]),errorHandler,validateRequest(qualityAssuranceSchema), addQualityAssurance);
 router.put('/quality-assurance/:qaId', verifyJWT, validateRequest(qualityAssuranceSchema), updateQualityAssurance);
 router.delete('/quality-assurance/:qaId', verifyJWT, deleteQualityAssurance);
 
