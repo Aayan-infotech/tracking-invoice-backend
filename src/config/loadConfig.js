@@ -31,6 +31,10 @@ const loadConfig = async () => {
             REFRESH_TOKEN_SECRET: secrets.REFRESH_TOKEN_SECRET,
             REFRESH_TOKEN_EXPIRY: secrets.REFRESH_TOKEN_EXPIRY,
 
+            // AWS configuration
+            AWS_REGION: secrets.AWS_REGION || "us-east-1",
+            AWS_BUCKET_NAME: secrets.AWS_BUCKET_NAME,
+
             // Email configuration
             EMAIL_USER: secrets.EMAIL_USER,
             EMAIL_PASS: secrets.EMAIL_PASS,
@@ -58,6 +62,10 @@ const loadConfig = async () => {
     ACCESS_TOKEN_EXPIRY: process.env.ACCESS_TOKEN_EXPIRY || "15m",
     REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET,
     REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY || "7d",
+
+    // AWS configuration
+    AWS_REGION: process.env.AWS_REGION || "us-east-1",
+    AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME,
 
     // Email configuration
     EMAIL_USER: process.env.EMAIL_USER,
