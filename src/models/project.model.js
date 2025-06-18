@@ -28,6 +28,9 @@ const projectSchema = new mongoose.Schema({
         type: String,
         required: false,
     },
+}, {
+    timestamps: true,
+    versionKey: false,
 });
 
 const Project = mongoose.model('Project', projectSchema);

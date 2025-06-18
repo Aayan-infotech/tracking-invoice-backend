@@ -32,6 +32,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
             }
         });
     }
+
     aggregation.push({
         $facet: {
             projects: [
@@ -206,8 +207,7 @@ const getAllTasks = asyncHandler(async (req, res) => {
             tasks: [
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { __v: 0 } },
-                { $sort: { createdAt: -1 } }
+                { $project: { __v: 0 } }
             ],
             totalCount: [{ $count: "count" }]
         }
@@ -441,8 +441,17 @@ const assignTask = asyncHandler(async (req, res) => {
     if (!status) {
         throw new ApiError(500, 'Failed to assign task');
     }
+    const newAssignment = new AssignTask({
+        taskId,
+        projectId,
+        userId
+    });
+    await newAssignment.save();
+    if (!newAssignment) {
+        throw new ApiError(500, 'Failed to create task assignment');
+    }
 
-    res.status(201).json(new ApiResponse(201, 'Task assigned successfully', status));
+    res.status(201).json(new ApiResponse(201, 'Task assigned successfully', newAssignment));
 });
 
 
@@ -979,6 +988,7 @@ const getTaskDetails = asyncHandler(async (req, res) => {
     });
 
     const task = await Task.aggregate(aggregation);
+
 
     return res.status(200).json(new ApiResponse(200, task.length > 0 ? "Task details fetched successfully" : "Task not found",
         task.length > 0 ? task[0] : null));
