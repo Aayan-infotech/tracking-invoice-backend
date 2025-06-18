@@ -8,7 +8,7 @@ import QualityAssurance from "../models/qualityAssurance.model.js";
 import Attendance from "../models/attendance.model.js";
 import { isValidObjectId } from "../utils/isValidObjectId.js";
 import mongoose from "mongoose";
-import { uploadImage } from "../utils/awsS3Utils.js";
+import { deleteObject, uploadImage } from "../utils/awsS3Utils.js";
 import taskUpdateHistoryModel from "../models/taskUpdateHistory.model.js";
 import generateInvoice from "../services/generateInvoice.js";
 import fs from 'fs';
@@ -500,10 +500,9 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
                         projectName: "$projectDetails.projectName",
                         projectId: "$projectDetails._id",
                         documentName: 1,
+                        documentFile: 1,
                         status: 1,
                         _id: 1,
-                        documentHtml: 1,
-
                     }
                 },
                 { $sort: { createdAt: -1 } }
@@ -541,7 +540,7 @@ const addQualityAssurance = asyncHandler(async (req, res) => {
 
     let documentFile = null;
 
-    
+
     if (req.files && req.files.documentFile) {
         const file = req.files.documentFile[0];
         const status = await uploadImage(file);
@@ -569,16 +568,31 @@ const addQualityAssurance = asyncHandler(async (req, res) => {
 
 const updateQualityAssurance = asyncHandler(async (req, res) => {
     const qualityAssuranceId = req.params.qaId;
+    if (!isValidObjectId(qualityAssuranceId)) {
+        throw new ApiError(400, 'Invalid quality assurance ID');
+    }
     const qualityAssurance = await QualityAssurance.findById(qualityAssuranceId);
     if (!qualityAssurance) {
         throw new ApiError(404, 'Quality assurance document not found');
     }
-    const { projectId, documentName, documentDescription } = req.body;
+    const { projectId, documentName } = req.body;
+
+    let documentFile = qualityAssurance.documentFile;
+    if (req.files && req.files.documentFile) {
+        const file = req.files.documentFile[0];
+        const status = await uploadImage(file);
+        if (!status.success) {
+            throw new ApiError(500, 'Failed to upload document file');
+        }
+        documentFile = status.fileUrl;
+    } else {
+        documentFile = qualityAssurance.documentFile;
+    }
 
     const updatedQualityAssurance = await QualityAssurance.findByIdAndUpdate(qualityAssuranceId, {
         projectId,
         documentName,
-        documentHtml: documentDescription
+        documentFile
     }, { new: true });
 
     if (!updatedQualityAssurance) {
@@ -736,10 +750,12 @@ const getMyProjects = asyncHandler(async (req, res) => {
         },
         {
             $unwind: "$projectDetails",
-
         },
         {
             $replaceRoot: { newRoot: "$projectDetails" }
+        },
+        {
+            $match: { status: 'active' }
         },
         {
             $facet: {
