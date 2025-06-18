@@ -207,7 +207,8 @@ const getAllTasks = asyncHandler(async (req, res) => {
             tasks: [
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { __v: 0 } }
+                { $project: { __v: 0 } },
+                { $sort: { createdAt: -1 } }
             ],
             totalCount: [{ $count: "count" }]
         }

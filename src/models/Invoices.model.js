@@ -18,6 +18,13 @@ const invoiceSchema = new mongoose.Schema({
             return this.invoiceType === 'task';
         }
     },
+    userId: {
+        type: String,
+        ref: 'User',
+        required: function () {
+            return this.invoiceType === 'task';
+        }
+    },
     invoiceUrl: {
         type: String,
         required: true,
