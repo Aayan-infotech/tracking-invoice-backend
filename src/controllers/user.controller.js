@@ -159,7 +159,7 @@ const getProfile = asyncHandler(async (req, res) => {
       email: user.email,
       mobile: user.mobile,
       address: user.address,
-      profile_image: user.profile_image ?? `${process.env.APP_URL}/placeholder/person.png`,  
+      profile_image: user.profile_image ?? `${process.env.APP_URL}/placeholder/person.png`,
       is2FAEnabled: user.is2FAEnabled,
     })
   );
@@ -172,12 +172,20 @@ const updateProfile = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
+  const existMobileNumber = await User.findOne({
+    mobile: mobile,
+    userId: { $ne: user.userId },
+  });
+  if (existMobileNumber) {
+    throw new ApiError(400, "Mobile number already exists");
+  }
+
   let profile_image = user.profile_image;
 
   if (req.files && req.files.profile_image) {
-    if (user.profile_image) {
-      await deleteObject(user.profile_image);
-    }
+    // if (user.profile_image) {
+    //   await deleteObject(user.profile_image);
+    // }
 
     const updateStatus = await uploadImage(req.files.profile_image[0]);
 
@@ -187,10 +195,11 @@ const updateProfile = asyncHandler(async (req, res) => {
   }
 
   user.name = name;
-  user.email = email;
+  // user.email = email;
   user.mobile = mobile;
   user.address = address;
   user.profile_image = profile_image;
+  
 
   const updatedUser = await user.save();
 
