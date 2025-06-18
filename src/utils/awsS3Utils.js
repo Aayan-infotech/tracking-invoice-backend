@@ -32,13 +32,17 @@ const uploadImage = async (file) => {
     const data = await s3.send(command);
 
     // remove the file
-    fs.unlinkSync(file.path);
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
     return {
       success: true,
       fileUrl: `https://${config.AWS_BUCKET_NAME}.s3.${config.AWS_REGION}.amazonaws.com/${file.filename}`,
     };
   } catch (error) {
-    fs.unlinkSync(file.path);
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
     console.error("Error uploading file:", error);
     throw new ApiError(500, error.message);
   }
