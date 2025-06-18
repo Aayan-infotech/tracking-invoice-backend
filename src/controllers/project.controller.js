@@ -1237,6 +1237,7 @@ const getAllActivities = asyncHandler(async (req, res) => {
     }
 
     const aggregation = [];
+    
     aggregation.push({
         $match: {
             $expr: {
