@@ -540,6 +540,8 @@ const addQualityAssurance = asyncHandler(async (req, res) => {
     }
 
     let documentFile = null;
+
+    
     if (req.files && req.files.documentFile) {
         const file = req.files.documentFile[0];
         const status = await uploadImage(file);
