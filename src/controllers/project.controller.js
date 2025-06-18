@@ -929,12 +929,59 @@ const getTaskDetails = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid task ID');
     }
 
-    const task = await Task.findById(taskId).select('-taskUpdatePhotos -createdAt -updatedAt');
-    if (!task) {
-        throw new ApiError(404, 'Task not found');
-    }
 
-    return res.status(200).json(new ApiResponse(200, 'Task details fetched successfully', task));
+    const aggregation = [];
+    aggregation.push({
+        $match: { _id: new mongoose.Types.ObjectId(taskId) }
+    });
+    aggregation.push({
+        $lookup: {
+            from: "taskupdatehistories",
+            localField: "_id",
+            foreignField: "taskId",
+            as: "taskUpdateHistory"
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $project: {
+            _id: 1,
+            taskName: 1,
+            description: 1,
+            amount: 1,
+            status: 1,
+            taskUpdatePhotos: 1,
+            taskUpdateDescription: 1,
+            invoiceUrl: 1,
+            taskUpdateHistory: "$taskUpdateHistory",
+            projectDetails: {
+                _id: "$projectDetails._id",
+                projectName: "$projectDetails.projectName",
+                description: "$projectDetails.description",
+                status: "$projectDetails.status"
+            }
+        }
+    });
+
+    const task = await Task.aggregate(aggregation);
+
+    return res.status(200).json(new ApiResponse(200, task.length > 0 ? "Task details fetched successfully" : "Task not found",
+        task.length > 0 ? task[0] : null));
 });
 
 
