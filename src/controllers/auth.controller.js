@@ -374,7 +374,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     userId: req.user.userId,
   });
 
-  console.log("Device Details", device);
 
   if (device) {
     device.isLoggedIn = false;

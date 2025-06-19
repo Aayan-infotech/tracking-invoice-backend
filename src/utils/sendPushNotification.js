@@ -1,4 +1,3 @@
-// 1. Import the admin SDK and the sendPushNotification function.
 import { firebaseAdmin } from "../config/firebase.js";
 import Notification from "../models/notification.model.js";
 
@@ -21,7 +20,6 @@ const sendPushNotification = async (
   };
 
   // Save notificationi in the database
-
   const saveNotification = await Notification.create({
     senderId,
     receiverId,

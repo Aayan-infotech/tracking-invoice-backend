@@ -13,6 +13,8 @@ import taskUpdateHistoryModel from "../models/taskUpdateHistory.model.js";
 import generateInvoice from "../services/generateInvoice.js";
 import fs from 'fs';
 import Invoice from "../models/Invoices.model.js";
+import { DeviceDetails } from "../models/deviceDetails.model.js";
+import sendPushNotification from "../utils/sendPushNotification.js";
 
 
 const getAllProjects = asyncHandler(async (req, res) => {
@@ -203,12 +205,17 @@ const getAllTasks = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
+        $sort: {
+            createdAt: -1
+        }
+    });
+
+    aggregation.push({
         $facet: {
             tasks: [
                 { $skip: skip },
                 { $limit: limit },
                 { $project: { __v: 0 } },
-                { $sort: { createdAt: -1 } }
             ],
             totalCount: [{ $count: "count" }]
         }
@@ -376,6 +383,12 @@ const getAssignTasks = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
+        $sort: {
+            createdAt: -1
+        }
+    });
+
+    aggregation.push({
         $facet: {
             tasks: [
                 { $skip: skip },
@@ -392,7 +405,6 @@ const getAssignTasks = asyncHandler(async (req, res) => {
                         username: "$userDetails.username",
                     }
                 },
-                { $sort: { createdAt: -1 } }
             ],
             totalCount: [{ $count: "count" }]
         }
@@ -427,6 +439,8 @@ const assignTask = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid task ID');
     }
 
+
+
     const task = await Task.findById(taskId);
 
     if (!task) {
@@ -436,6 +450,27 @@ const assignTask = asyncHandler(async (req, res) => {
     if (task.assignedTo) {
         throw new ApiError(400, 'Task is already assigned to a user');
     }
+
+    const existingAssignment = await AssignTask.findOne({ taskId, projectId, userId });
+    if (existingAssignment) {
+        throw new ApiError(409, 'Task is already assigned to this user for this project');
+    }
+
+    // Get the Device details
+    const deviceDetails = await DeviceDetails.find({ userId, isLoggedIn: true }).select('deviceToken');
+    // console.log('Device Details:', deviceDetails);
+    if (deviceDetails && deviceDetails.length > 0) {
+        // Send Push Notification to the user
+        const deviceTokens = deviceDetails.map(device => device.deviceToken);
+        // console.log('Device Tokens:', deviceTokens);
+        sendPushNotification(deviceTokens, 'Task Assigned', `You have been assigned a new task: ${task.taskName}`, req.user.userId, userId, {
+            type: "task_assigned",
+            task: JSON.stringify(task),
+        });
+
+    }
+
+
 
     task.assignedTo = userId;
     const status = await task.save();
@@ -1237,7 +1272,7 @@ const getAllActivities = asyncHandler(async (req, res) => {
     }
 
     const aggregation = [];
-    
+
     aggregation.push({
         $match: {
             $expr: {
@@ -1334,9 +1369,9 @@ const getAllActivities = asyncHandler(async (req, res) => {
             per_page: limit
         } : null
     ));
-
-
 });
+
+
 
 
 export {
@@ -1368,5 +1403,5 @@ export {
     getAllInvoicesProject,
     ProjectInvoices,
     updateInvoiceStatus,
-    getAllActivities
+    getAllActivities,
 };

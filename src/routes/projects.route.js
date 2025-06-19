@@ -30,7 +30,7 @@ import {
     getAllInvoicesProject,
     ProjectInvoices,
     updateInvoiceStatus,
-    getAllActivities
+    getAllActivities,
 } from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {

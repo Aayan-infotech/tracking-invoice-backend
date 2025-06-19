@@ -10,11 +10,14 @@ import {
   getAllVerifiedUsers,
   getDashboard,
   securitySetting,
+  getNotifications,
+  updateNotification,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
   updateProfileSchema,
   updateUserDetailsSchema,
+  updateNotificationSchema,
 } from "../validators/userValidator.js";
 
 const router = Router();
@@ -49,5 +52,7 @@ router.put(
 router.get('/all-verified-users',verifyJWT,getAllVerifiedUsers);
 router.get('/dashboard',verifyJWT,getDashboard);
 router.get('/security-setting',verifyJWT,securitySetting);
+router.get('/get-notifications',verifyJWT,getNotifications);
+router.put('/update-notification-status',verifyJWT,validateRequest(updateNotificationSchema),updateNotification);
 
 export default router;

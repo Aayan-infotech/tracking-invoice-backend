@@ -8,6 +8,8 @@ import { sendEmail } from "../services/emailService.js";
 import Project from "../models/project.model.js";
 import Task from "../models/task.model.js";
 import { DeviceDetails } from "../models/deviceDetails.model.js";
+import Notification from "../models/notification.model.js";
+import { isValidObjectId } from "../utils/isValidObjectId.js";
 
 const getAllUsers = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -199,7 +201,7 @@ const updateProfile = asyncHandler(async (req, res) => {
   user.mobile = mobile;
   user.address = address;
   user.profile_image = profile_image;
-  
+
 
   const updatedUser = await user.save();
 
@@ -253,6 +255,113 @@ const securitySetting = asyncHandler(async (req, res) => {
 
 });
 
+
+const getNotifications = asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit) || 10);
+  const skip = (page - 1) * limit;
+
+  const duration = req.query.duration || "all";
+
+  if (!["all", "week", "month"].includes(duration)) {
+    throw new ApiError(400, "Invalid duration parameter. Use 'all', 'week', or 'month'.");
+  }
+
+  const aggregation = [];
+  aggregation.push({
+    $match: { receiverId: req.user.userId },
+  });
+
+  aggregation.push({
+    $match: {
+      createdAt: {
+        $gte: duration === "all" ? new Date(0) :
+          duration === "week" ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) :
+            duration === "month" ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) :
+              new Date(0)
+      }
+    }
+  });
+
+  aggregation.push({
+    $sort: { createdAt: -1 },
+  });
+
+  aggregation.push({
+    $facet: {
+      notifications: [
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $project: {
+            _id: 0,
+            notificationId: "$_id",
+            // senderId: 1,
+            receiverId: 1,
+            title: 1,
+            body: 1,
+            isRead: 1,
+            createdAt: 1,
+          },
+        },
+      ],
+      totalCount: [{ $count: "count" }],
+    },
+  });
+
+  const result = await Notification.aggregate(aggregation);
+  const notifications = result[0].notifications;
+  const totalRecords =
+    result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+  const totalPages = Math.ceil(totalRecords / limit);
+
+  res.json(
+    new ApiResponse(
+      200,
+      notifications.length > 0 ? "Fetched notifications successfully" : "No notifications found",
+      notifications.length > 0
+        ? {
+          notifications,
+          total_page: totalPages,
+          current_page: page,
+          total_records: totalRecords,
+          per_page: limit,
+        }
+        : null
+    )
+  );
+});
+
+
+const updateNotification = asyncHandler(async (req, res) => {
+  const { notificationId , isRead } = req.body;
+  if (!notificationId) {
+    throw new ApiError(400, "Notification ID is required");
+  }
+
+  if(!isValidObjectId(notificationId)) {
+    throw new ApiError(400, "Invalid Notification ID");
+  }
+
+  const notification = await Notification.findById(notificationId);
+  if (!notification) {
+    throw new ApiError(404, "Notification not found");
+  }
+
+  if (notification.receiverId !== req.user.userId) {
+    throw new ApiError(403, "You are not authorized to update this notification");
+  }
+  notification.isRead = isRead;
+  await notification.save();
+  res.json(
+    new ApiResponse(200, "Notification status updated successfully", {
+      notificationId: notification._id,
+      isRead: notification.isRead,
+    })
+  );
+
+});
+
 export {
   getAllUsers,
   updateUserDetails,
@@ -261,5 +370,7 @@ export {
   updateProfile,
   getAllVerifiedUsers,
   getDashboard,
-  securitySetting
+  securitySetting,
+  getNotifications,
+  updateNotification
 };

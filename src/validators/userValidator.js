@@ -265,6 +265,18 @@ const updateUserDetailsSchema = Joi.object({
   }),
 });
 
+const updateNotificationSchema = Joi.object({
+  notificationId: Joi.string().required().messages({
+    "string.base": "Notification ID must be a string.",
+    "string.empty": "Notification ID is required.",
+    "any.required": "Notification ID is required.",
+  }),
+  isRead: Joi.boolean().required().messages({
+    "boolean.base": "Status must be a boolean.",
+    "any.required": "Status is required.",
+  }),
+});
+
 export {
   userValidationSchema,
   loginValidationSchema,
@@ -274,4 +286,5 @@ export {
   changePasswordSchema,
   saveDeviceDetailsSchema,
   updateUserDetailsSchema,
+  updateNotificationSchema,
 };

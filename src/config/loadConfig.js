@@ -39,6 +39,7 @@ const loadConfig = async () => {
             EMAIL_USER: secrets.EMAIL_USER,
             EMAIL_PASS: secrets.EMAIL_PASS,
 
+            FIREBASE_CONFIG: secrets.FIREBASE_CONFIG,
           };
         } catch (parseError) {
           console.error("JSON Parse Error:", parseError);
@@ -71,6 +72,7 @@ const loadConfig = async () => {
     EMAIL_USER: process.env.EMAIL_USER,
     EMAIL_PASS: process.env.EMAIL_PASS,
 
+    FIREBASE_CONFIG: process.env.FIREBASE_CONFIG,
   };
 };
 
