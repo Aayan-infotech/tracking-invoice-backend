@@ -11,7 +11,6 @@ import mongoose from "mongoose";
 import { deleteObject, uploadImage } from "../utils/awsS3Utils.js";
 import taskUpdateHistoryModel from "../models/taskUpdateHistory.model.js";
 import generateInvoice from "../services/generateInvoice.js";
-import fs from 'fs';
 import Invoice from "../models/Invoices.model.js";
 import { DeviceDetails } from "../models/deviceDetails.model.js";
 import sendPushNotification from "../utils/sendPushNotification.js";
@@ -922,35 +921,34 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
     await taskUpdateHistory.save();
 
     if (status === 'completed') {
-        // const invoiceData = {
-        //     projectName: project.projectName || 'Unknown Project',
-        //     taskName: task.taskName,
-        //     date: new Date().toLocaleDateString(),
-        //     invoiceNumber: `INV-${task._id}`,
-        //     items: [
-        //         { name: task.taskName, quantity: 1, price: task.amount },
-        //     ],
-        // };
+        const invoiceData = {
+            projectName: project.projectName || 'Unknown Project',
+            taskName: task.taskName,
+            date: new Date().toLocaleDateString(),
+            invoiceNumber: `INV-${task._id}`,
+            items: [
+                { name: task.taskName, quantity: 1, price: task.amount },
+            ],
+        };
 
-        // const s3Url = await generateInvoice(invoiceData, `invoices/INV-${task._id}.pdf`);
-        const s3Url = 'https://example.com/invoices/INV-' + task._id + '.pdf'; 
+        const s3Url = await generateInvoice(invoiceData, `invoices/INV-${task._id}.pdf`);
 
-        // // Save the Invoice to Database
-        // const invoice = await Invoice.create({
-        //     invoiceNumber: `INV-${task._id}`,
-        //     userId: req.user.userId,
-        //     projectId: task.projectId,
-        //     taskId: task._id,
-        //     invoiceUrl: s3Url,
-        //     amount: task.amount,
-        //     status: 'unpaid',
-        //     InvoiceDate: new Date(),
-        //     invoiceType: 'task'
-        // });
+        // Save the Invoice to Database
+        const invoice = await Invoice.create({
+            invoiceNumber: `INV-${task._id}`,
+            userId: req.user.userId,
+            projectId: task.projectId,
+            taskId: task._id,
+            invoiceUrl: s3Url,
+            amount: task.amount,
+            status: 'unpaid',
+            InvoiceDate: new Date(),
+            invoiceType: 'task'
+        });
 
-        // if (!invoice) {
-        //     throw new ApiError(500, 'Failed to create invoice');
-        // }
+        if (!invoice) {
+            throw new ApiError(500, 'Failed to create invoice');
+        }
 
         task.invoiceUrl = s3Url;
     }
