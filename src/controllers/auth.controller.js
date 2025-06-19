@@ -492,6 +492,7 @@ const saveDeviceDetails = asyncHandler(async (req, res) => {
     );
 });
 
+
 export {
   register,
   loginUser,
