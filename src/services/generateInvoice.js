@@ -4,6 +4,10 @@ import streamBuffers from 'stream-buffers';
 import { loadConfig } from '../config/loadConfig.js';
 
 const config = await loadConfig();
+console.log('AWS Configuration:', {
+    region: config.AWS_REGION,
+    bucketName: config.AWS_BUCKET_NAME,
+});
 
 const s3 = new S3Client({ region: config.AWS_REGION });
 

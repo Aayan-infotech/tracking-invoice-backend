@@ -161,7 +161,7 @@ const getProfile = asyncHandler(async (req, res) => {
       email: user.email,
       mobile: user.mobile,
       address: user.address,
-      profile_image: user.profile_image ?? `${process.env.APP_URL}/placeholder/person.png`,
+      profile_image: user.profile_image ?? `/placeholder/person.png`,
       is2FAEnabled: user.is2FAEnabled,
     })
   );
