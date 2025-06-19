@@ -932,7 +932,8 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
             ],
         };
 
-        const s3Url = await generateInvoice(invoiceData, `invoices/INV-${task._id}.pdf`);
+        // const s3Url = await generateInvoice(invoiceData, `invoices/INV-${task._id}.pdf`);
+        const s3Url = 'https://example.com/invoices/INV-' + task._id + '.pdf'; 
 
         // Save the Invoice to Database
         const invoice = await Invoice.create({
