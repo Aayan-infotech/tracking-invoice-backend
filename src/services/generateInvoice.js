@@ -1,8 +1,11 @@
 import PDFDocument from 'pdfkit';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import streamBuffers from 'stream-buffers';
+import { loadConfig } from '../config/loadConfig.js';
 
-const s3 = new S3Client({ region: process.env.AWS_REGION });
+const config = await loadConfig();
+
+const s3 = new S3Client({ region: config.AWS_REGION });
 
 async function generateInvoice(invoiceData, s3Key) {
     return new Promise((resolve, reject) => {
@@ -67,14 +70,14 @@ async function generateInvoice(invoiceData, s3Key) {
             const buffer = writeStream.getContents();
             try {
                 const uploadCommand = new PutObjectCommand({
-                    Bucket: process.env.AWS_BUCKET_NAME ,
+                    Bucket: config.AWS_BUCKET_NAME,
                     Key: s3Key,
                     Body: buffer,
                     ContentType: 'application/pdf',
                 });
 
                 await s3.send(uploadCommand);
-                resolve(`https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`);
+                resolve(`https://${config.AWS_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`);
             } catch (error) {
                 reject(error);
             }
