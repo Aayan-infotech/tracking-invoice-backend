@@ -37,7 +37,9 @@ import {
   updateProjectTask,
   deleteProjectTask,
   getTodayClockingDetails,
-  clockOut
+  clockOut,
+  getProjectInvoices,
+  generateProjectInvoice
 } from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
@@ -122,6 +124,8 @@ router.put(
 );
 router.get('/get-invoice', verifyJWT, getAllInvoicesProject);
 router.get('/get-activity', verifyJWT, getAllActivities);
+router.get('/get-project-invoices', verifyJWT, getProjectInvoices);
+router.post('/generate-project-invoice',verifyJWT, generateProjectInvoice);
 
 
 

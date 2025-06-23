@@ -99,66 +99,6 @@ const updateProject = asyncHandler(async (req, res) => {
     }
 
 
-
-    if (status === 'completed') {
-        const aggregation = [];
-        aggregation.push({
-            $match: {
-                projectId: new mongoose.Types.ObjectId(projectId),
-                status: 'completed'
-            }
-        });
-
-        aggregation.push({
-            $addFields: {
-                quantity: 1
-            }
-        });
-        aggregation.push({
-            $project: {
-                name: "$taskName",
-                quantity: "$quantity",
-                price: "$amount"
-            }
-        });
-
-        const getAllCompletedTasks = await Task.aggregate(aggregation);
-
-        if (getAllCompletedTasks.length === 0) {
-            throw new ApiError(400, 'Cannot mark project as completed without any completed tasks');
-        }
-
-
-        const invoiceData = {
-            projectName: project.projectName || 'Unknown Project',
-            // taskName: task.taskName,
-            date: new Date().toLocaleDateString(),
-            invoiceNumber: `INVP-${project._id}`,
-            items: getAllCompletedTasks
-        };
-
-        const s3Url = await generateInvoice(invoiceData, `invoices/INVP-${project._id}.pdf`);
-
-        // Save the Invoice to Database
-        const invoice = await Invoice.create({
-            invoiceNumber: `INVP-${project._id}`,
-            projectId: project._id,
-            invoiceUrl: s3Url,
-            amount: 0,
-            status: 'unpaid',
-            InvoiceDate: new Date(),
-            invoiceType: 'project'
-        });
-
-        if (!invoice) {
-            throw new ApiError(500, 'Failed to create invoice');
-        }
-
-        project.invoiceUrl = s3Url;
-
-    }
-
-
     project.projectName = projectName;
     project.description = description;
     project.startDate = startDate;
@@ -1139,7 +1079,10 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Invalid task ID');
     }
 
-    const task = await ProjectTask.findById(taskId);
+
+
+    const task = await ProjectTask.findById(taskId).populate('taskId', 'taskName taskQuantity taskCompletedQuantity amount');
+
     if (!task) {
         throw new ApiError(404, 'Task not found');
     }
@@ -1177,15 +1120,21 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
 
         const InvoiceNumber = await generateUniqueInvoiceNumber();
 
-        const invoiceData = {
+        const invoiceData = [{
             projectName: project.projectName || 'Unknown Project',
-            taskName: task.taskName,
+            taskName: task?.taskId?.taskName,
             date: new Date().toLocaleDateString(),
             invoiceNumber: InvoiceNumber,
             items: [
-                { name: task.taskName, quantity: taskCompletedQuantity, price: task.amount },
+                { name: task?.taskId?.taskName, quantity: taskCompletedQuantity, price: task?.taskId?.amount },
             ],
-        };
+            user: {
+                name: req.user.name || 'Unknown User',
+                email: req.user.email || 'Unknown Email',
+                username: req.user.username || 'Unknown Username',
+                address: req.user.address || 'Unknown Address',
+            }
+        }];
 
         const s3Url = await generateInvoice(invoiceData, `invoices/${InvoiceNumber}.pdf`);
 
@@ -1372,7 +1321,6 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
     const assignedProject = await AssignTask.aggregate(aggregationTask);
     // console.log(assignedProject);
     const projectIds = assignedProject.map(item => item.projectId);
-    // console.log(projectIds);
 
 
     const aggregation = [];
@@ -1446,11 +1394,6 @@ const ProjectInvoices = asyncHandler(async (req, res) => {
     const skip = (page - 1) * limit;
 
     const aggregation = [];
-    aggregation.push({
-        $match: {
-            invoiceType: 'project',
-        }
-    });
     aggregation.push({
         $lookup: {
             from: "projects",
@@ -1684,6 +1627,189 @@ const getAllActivities = asyncHandler(async (req, res) => {
 });
 
 
+const getProjectInvoices = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const userId = req.user.userId;
+    if (!userId) {
+        throw new ApiError(404, 'User not found');
+    }
+
+    const aggregation = [
+        {
+            $match: { userId: userId }
+        },
+        {
+            $group: {
+                _id: "$projectId"
+            }
+        },
+        {
+            $lookup: {
+                from: "projects",
+                localField: "_id",
+                foreignField: "_id",
+                as: "projectDetails"
+            }
+        },
+        {
+            $unwind: "$projectDetails",
+        },
+        {
+            $replaceRoot: { newRoot: "$projectDetails" }
+        },
+        {
+            $facet: {
+                metadata: [
+                    { $count: "total" }
+                ],
+                data: [
+                    {
+                        $project: {
+                            __v: 0,
+                        }
+                    },
+                    { $skip: skip },
+                    { $limit: limit },
+                ]
+            }
+        },
+        {
+            $addFields: {
+                total: { $arrayElemAt: ["$metadata.total", 0] }
+            }
+        }
+    ];
+
+    const result = await AssignTask.aggregate(aggregation);
+
+
+    const projects = result[0]?.data || [];
+    const total = result[0]?.total || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    res.status(200).json(new ApiResponse(200, 'User projects fetched successfully', {
+        projects,
+        total_page: totalPages,
+        current_page: page,
+        total_records: total,
+        per_page: limit
+    }));
+
+});
+
+const generateProjectInvoice = asyncHandler(async (req, res) => {
+    const { projectId } = req.body;
+    if (!isValidObjectId(projectId)) {
+        throw new ApiError(400, 'Invalid project ID');
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+        throw new ApiError(404, 'Project not found');
+    }
+
+    const user = req.user;
+
+    const aggregation = [];
+
+    aggregation.push({
+        $match: {
+            projectId: new mongoose.Types.ObjectId(projectId),
+            userId: user.userId,
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "projecttasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "projectTask"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectTask",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "projectTask.taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $addFields: {
+            user: {
+                name: user.name,
+                username: user.username,
+                email: user.email,
+                address: user.address,
+            }
+        }
+    });
+
+
+    aggregation.push({
+        $project: {
+            projectName: "$projectDetails.projectName",
+            taskName: "$taskDetails.taskName",
+            invoiceNumber: 1,
+            date: "$InvoiceDate",
+            items: [
+                {
+                    name: "$taskDetails.taskName",
+                    quantity: "$taskCompletedQuantity",
+                    price: "$taskDetails.amount"
+                }
+            ],
+            user: 1,
+        }
+    });
+
+
+    const invoices = await Invoice.aggregate(aggregation);
+    if (!invoices || invoices.length === 0) {
+        throw new ApiError(404, 'No invoices found for this project');
+    }
+
+    const generatedInvoice = await generateInvoice(invoices, `invoices/${projectId}.pdf`);
+
+    res.status(200).json(new ApiResponse(200, 'Invoice generated successfully', {
+        invoiceUrl: generatedInvoice
+    }));
+
+});
 
 
 export {
@@ -1722,5 +1848,7 @@ export {
     deleteProjectTask,
     updateProjectTask,
     getTodayClockingDetails,
-    clockOut
+    clockOut,
+    getProjectInvoices,
+    generateProjectInvoice
 };
