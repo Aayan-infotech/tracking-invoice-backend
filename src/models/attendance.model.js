@@ -10,6 +10,10 @@ const attendanceSchema = new mongoose.Schema({
         type: Date,
         required: true,
     },
+    isClockedIn: {
+        type: Boolean,
+        default: true,
+    },
     clockOutTime: {
         type: Date,
         required: false,

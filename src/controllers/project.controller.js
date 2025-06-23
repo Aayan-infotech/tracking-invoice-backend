@@ -14,6 +14,9 @@ import generateInvoice from "../services/generateInvoice.js";
 import Invoice from "../models/Invoices.model.js";
 import { DeviceDetails } from "../models/deviceDetails.model.js";
 import sendPushNotification from "../utils/sendPushNotification.js";
+import ProjectTask from "../models/Projecttask.model.js";
+import { assign } from "nodemailer/lib/shared/index.js";
+import { distance, generateUniqueInvoiceNumber } from "../utils/HelperFunctions.js";
 
 
 const getAllProjects = asyncHandler(async (req, res) => {
@@ -180,6 +183,11 @@ const getProjectDropDown = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, 'Get Project dropdown successfully', projects));
 });
 
+const getTaskDropDown = asyncHandler(async (req, res) => {
+    const tasks = await Task.find({ status: 'active' }).select('taskName amount _id');
+    return res.status(200).json(new ApiResponse(200, 'Get Task dropdown successfully', tasks));
+});
+
 const getAllTasks = asyncHandler(async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, parseInt(req.query.limit) || 10);
@@ -187,21 +195,21 @@ const getAllTasks = asyncHandler(async (req, res) => {
 
     const aggregation = [];
 
-    aggregation.push({
-        $lookup: {
-            from: "projects",
-            localField: "projectId",
-            foreignField: "_id",
-            as: "projectDetails"
-        }
-    });
+    // aggregation.push({
+    //     $lookup: {
+    //         from: "projects",
+    //         localField: "projectId",
+    //         foreignField: "_id",
+    //         as: "projectDetails"
+    //     }
+    // });
 
-    aggregation.push({
-        $unwind: {
-            path: "$projectDetails",
-            preserveNullAndEmptyArrays: true
-        }
-    });
+    // aggregation.push({
+    //     $unwind: {
+    //         path: "$projectDetails",
+    //         preserveNullAndEmptyArrays: true
+    //     }
+    // });
 
     aggregation.push({
         $sort: {
@@ -240,24 +248,21 @@ const getAllTasks = asyncHandler(async (req, res) => {
 });
 
 const addTask = asyncHandler(async (req, res) => {
-    const { projectId, taskName, amount, description, taskQuantity } = req.body;
+    const { taskName, amount, description } = req.body;
 
-    if (!projectId || !taskName || !amount || !taskQuantity) {
+    if (!taskName || !amount) {
         throw new ApiError(400, 'Missing required fields');
     }
 
     // Check if the same task already exists in the project
-    const existingTask = await Task.findOne({ projectId, taskName });
+    const existingTask = await Task.findOne({ taskName });
     if (existingTask) {
-        throw new ApiError(409, 'Task with the same name already exists in this project');
+        throw new ApiError(409, 'Task with the same name already exists');
     }
 
-    // Create and save the task
     const task = await Task.create({
-        projectId,
         taskName,
         amount,
-        taskQuantity,
         description,
     });
 
@@ -270,7 +275,7 @@ const addTask = asyncHandler(async (req, res) => {
 
 const updateTask = asyncHandler(async (req, res) => {
     const taskId = req.params.taskId;
-    const { projectId, taskName, description, status, amount, taskQuantity } = req.body;
+    const { taskName, amount, status, description } = req.body;
 
     if (!isValidObjectId(taskId)) {
         throw new ApiError(400, 'Invalid task ID');
@@ -281,22 +286,16 @@ const updateTask = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Task not found');
     }
 
-    if (existingTask.status === 'completed') {
-        throw new ApiError(400, 'Cannot update a completed task');
-    }
-
-    const duplicateTask = await Task.findOne({ _id: { $ne: taskId }, projectId, taskName });
+    const duplicateTask = await Task.findOne({ _id: { $ne: taskId }, taskName });
     if (duplicateTask) {
-        throw new ApiError(409, 'Task with the same name already exists in this project');
+        throw new ApiError(409, 'Task with the same name already exists');
     }
 
     const updatedTask = await Task.findByIdAndUpdate(taskId, {
-        projectId,
         taskName,
-        description,
-        status,
         amount,
-        taskQuantity
+        status,
+        description
     }, { new: true });
 
     if (!updatedTask) {
@@ -317,14 +316,177 @@ const deleteTask = asyncHandler(async (req, res) => {
 }
 );
 
+const getAllProjectTasks = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const aggregation = [];
+    aggregation.push({
+        $lookup: {
+            from: "projects",
+            localField: "projectId",
+            foreignField: "_id",
+            as: "projectDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $facet: {
+            projectTasks: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        projectId: "$projectDetails._id",
+                        projectName: "$projectDetails.projectName",
+                        taskId: "$taskDetails._id",
+                        taskName: "$taskDetails.taskName",
+                        amount: 1,
+                        taskQuantity: 1,
+                        status: 1,
+                        description: 1,
+                        taskUpdateDescription: 1,
+                        taskUpdatePhotos: 1,
+                        taskUpdateDocuments: 1,
+                        updateBy: 1,
+                        invoiceUrl: 1,
+                    }
+                },
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    })
+
+    const result = await ProjectTask.aggregate(aggregation);
+
+    const projectTasks = result[0].projectTasks;
+
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    res.status(200).json(new ApiResponse(200,
+        projectTasks.length > 0 ? "Fetched all project tasks successfully" : "No project tasks found",
+        projectTasks.length > 0 ? {
+            projectTasks,
+            total_page: totalPages,
+            current_page: page,
+            total_records: totalRecords,
+            per_page: limit
+        } : null
+    ));
+});
+
+const addProjectTask = asyncHandler(async (req, res) => {
+    const { projectId, taskId, taskQuantity, description } = req.body;
+
+    if (!projectId || !taskId || !taskQuantity || !description) {
+        throw new ApiError(400, 'Missing required fields');
+    }
+    if (!isValidObjectId(projectId) || !isValidObjectId(taskId)) {
+        throw new ApiError(400, 'Invalid project ID or task ID');
+    }
+
+    // Check if the project exists
+    const project = await Project.findById(projectId);
+    if (!project) {
+        throw new ApiError(404, 'Project not found');
+    }
+
+    // Check if the task exists
+    const task = await Task.findById(taskId);
+    if (!task) {
+        throw new ApiError(404, 'Task not found');
+    }
+
+    // Existing task
+    const existingTask = await ProjectTask.findOne({ projectId, taskId });
+    if (existingTask) {
+        throw new ApiError(409, 'Task already exists in the project');
+    }
+
+    const projectTask = await ProjectTask.create({
+        projectId,
+        taskId,
+        amount: task.amount,
+        taskQuantity,
+        description,
+    });
+
+    if (!projectTask) {
+        throw new ApiError(400, 'Failed to create project task');
+    }
+
+    return res.status(200).json(new ApiResponse(200, 'Project task created successfully', projectTask));
+});
 
 const getAllTaskofProject = asyncHandler(async (req, res) => {
     const projectId = req.params.projectId;
-    const tasks = await Task.find({ projectId }).select('taskName _id').sort({ createdAt: -1 });
+    // const tasks = await ProjectTask.find({ projectId }).select('taskName _id').sort({ createdAt: -1 });
+    // if (!tasks || tasks.length === 0) {
+    //     throw new ApiError(404, 'No tasks found');
+    // }
+    // return res.status(200).json(new ApiResponse(200, "Tasks fetched successfully", tasks));
+
+    const aggregation = [];
+    aggregation.push({
+        $match: { projectId: new mongoose.Types.ObjectId(projectId) }
+    });
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $project: {
+            _id: 1,
+            taskName: "$taskDetails.taskName",
+        }
+    });
+
+    const tasks = await ProjectTask.aggregate(aggregation);
+
     if (!tasks || tasks.length === 0) {
-        throw new ApiError(404, 'No tasks found');
+        throw new ApiError(404, 'No tasks found for this project');
     }
+
     return res.status(200).json(new ApiResponse(200, "Tasks fetched successfully", tasks));
+
 });
 
 const getAssignTasks = asyncHandler(async (req, res) => {
@@ -350,22 +512,6 @@ const getAssignTasks = asyncHandler(async (req, res) => {
 
     aggregation.push({
         $lookup: {
-            from: "tasks",
-            localField: "taskId",
-            foreignField: "_id",
-            as: "taskDetails"
-        }
-    });
-
-    aggregation.push({
-        $unwind: {
-            path: "$taskDetails",
-            preserveNullAndEmptyArrays: true
-        }
-    });
-
-    aggregation.push({
-        $lookup: {
             from: "users",
             localField: "userId",
             foreignField: "userId",
@@ -382,8 +528,26 @@ const getAssignTasks = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+
+
+
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
         $sort: {
-            createdAt: -1
+            "taskDetails.createdAt": -1
         }
     });
 
@@ -395,7 +559,7 @@ const getAssignTasks = asyncHandler(async (req, res) => {
                 {
                     $project: {
                         _id: 1,
-                        taskId: "$taskDetails._id",
+                        taskId: "$projectTaskId",
                         taskName: "$taskDetails.taskName",
                         projectId: "$projectDetails._id",
                         projectName: "$projectDetails.projectName",
@@ -440,28 +604,24 @@ const assignTask = asyncHandler(async (req, res) => {
 
 
 
-    const task = await Task.findById(taskId);
+    const projectTask = await ProjectTask.findById(taskId);
 
-    if (!task) {
-        throw new ApiError(404, 'Task not found');
+
+    if (!projectTask) {
+        throw new ApiError(404, 'Project Task not found');
     }
 
-    if (task.assignedTo) {
-        throw new ApiError(400, 'Task is already assigned to a user');
-    }
 
-    const existingAssignment = await AssignTask.findOne({ taskId, projectId, userId });
+    const existingAssignment = await AssignTask.findOne({ taskId: projectTask.taskId, projectTaskId: projectTask._id, projectId, userId });
     if (existingAssignment) {
         throw new ApiError(409, 'Task is already assigned to this user for this project');
     }
 
     // Get the Device details
     const deviceDetails = await DeviceDetails.find({ userId, isLoggedIn: true }).select('deviceToken');
-    // console.log('Device Details:', deviceDetails);
     if (deviceDetails && deviceDetails.length > 0) {
         // Send Push Notification to the user
         const deviceTokens = deviceDetails.map(device => device.deviceToken);
-        // console.log('Device Tokens:', deviceTokens);
         sendPushNotification(deviceTokens, 'Task Assigned', `You have been assigned a new task: ${task.taskName}`, req.user.userId, userId, {
             type: "task_assigned",
             task: JSON.stringify(task),
@@ -471,13 +631,14 @@ const assignTask = asyncHandler(async (req, res) => {
 
 
 
-    task.assignedTo = userId;
-    const status = await task.save();
+    projectTask.assignedTo = userId;
+    const status = await projectTask.save();
     if (!status) {
         throw new ApiError(500, 'Failed to assign task');
     }
     const newAssignment = new AssignTask({
-        taskId,
+        taskId: projectTask.taskId,
+        projectTaskId: projectTask._id,
         projectId,
         userId
     });
@@ -585,14 +746,9 @@ const addQualityAssurance = asyncHandler(async (req, res) => {
     let documentFile = null;
 
 
-    if (req.files && req.files.documentFile) {
+    if (req.files?.documentFile?.length > 0) {
         const file = req.files.documentFile[0];
-        const status = await uploadImage(file);
-        if (!status.success) {
-            throw new ApiError(500, 'Failed to upload document file');
-        }
-
-        documentFile = status.fileUrl;
+        documentFile = file.location;
     } else {
         throw new ApiError(400, 'Document file is required');
     }
@@ -622,15 +778,9 @@ const updateQualityAssurance = asyncHandler(async (req, res) => {
     const { projectId, documentName } = req.body;
 
     let documentFile = qualityAssurance.documentFile;
-    if (req.files && req.files.documentFile) {
+    if (req.files?.documentFile?.length > 0) {
         const file = req.files.documentFile[0];
-        const status = await uploadImage(file);
-        if (!status.success) {
-            throw new ApiError(500, 'Failed to upload document file');
-        }
-        documentFile = status.fileUrl;
-    } else {
-        documentFile = qualityAssurance.documentFile;
+        documentFile = file.location;
     }
 
     const updatedQualityAssurance = await QualityAssurance.findByIdAndUpdate(qualityAssuranceId, {
@@ -665,6 +815,18 @@ const clockIn = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'User not found');
     }
 
+    // Check if the user has already clocked in today
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const existingAttendance = await Attendance.findOne({
+        userId: user.userId,
+        clockInTime: { $gte: startOfDay, $lt: endOfDay }
+    });
+    if (existingAttendance) {
+        throw new ApiError(400, 'You have already clocked in today');
+    }
+
 
     const attendance = await Attendance.create({
         userId: user.userId,
@@ -678,6 +840,75 @@ const clockIn = asyncHandler(async (req, res) => {
 
     res.status(201).json(new ApiResponse(201, 'Clock-in successful', attendance));
 });
+
+
+const clockOut = asyncHandler(async (req, res) => {
+    const { latitude, longitude } = req.body;
+    if (!latitude || !longitude) {
+        throw new ApiError(400, 'Latitude and Longitude are required');
+    }
+
+    const user = req.user;
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+    const attendance = await Attendance.findOne({
+        userId: user.userId,
+        clockInTime: { $gte: startOfDay, $lt: endOfDay }
+    });
+
+    if (!attendance) {
+        throw new ApiError(404, 'No clock-in record found for today');
+    }
+
+    const currentLocation = { lat: latitude, lon: longitude };
+    const ClockedInLocation = { lat: attendance.latitude, lon: attendance.longitude };
+
+    const dist = distance(currentLocation, ClockedInLocation);
+
+    if (dist > 100) { // Assuming 100 meters is the allowed distance
+        throw new ApiError(400, `You are too far from your clock-in location to clock out. Distance: ${dist} meters`);
+    }
+
+    // update the clock-out time
+    attendance.clockOutTime = new Date();
+    attendance.isClockedIn = false;
+    const updatedAttendance = await attendance.save();
+    if (!updatedAttendance) {
+        throw new ApiError(500, 'Failed to clock out');
+    }
+
+    res.status(200).json(new ApiResponse(200, 'Clock-out successful', updatedAttendance));
+
+});
+
+const getTodayClockingDetails = asyncHandler(async (req, res) => {
+    const user = req.user;
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+    const attendance = await Attendance.findOne({
+        userId: user.userId,
+        clockInTime: { $gte: startOfDay, $lt: endOfDay }
+    });
+
+    if (!attendance) {
+        throw new ApiError(404, 'No clock-in record found for today');
+    }
+
+    res.status(200).json(new ApiResponse(200, 'Today clocking details fetched successfully', attendance));
+});
 const getProjectDetails = asyncHandler(async (req, res) => {
     const projectId = req.params.projectId;
     if (!isValidObjectId(projectId)) {
@@ -689,18 +920,43 @@ const getProjectDetails = asyncHandler(async (req, res) => {
     }
 
     const aggregation = [];
+
     aggregation.push({
         $match: { _id: project._id }
     });
 
     aggregation.push({
         $lookup: {
-            from: "tasks",
+            from: "projecttasks",
             localField: "_id",
             foreignField: "projectId",
-            as: "tasks"
+            as: "projectTasks"
         }
     });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectTasks",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "projectTasks.taskId",
+            foreignField: "_id",
+            as: "projectTasks.taskDetail"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$projectTasks.taskDetail",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
 
     aggregation.push({
         $lookup: {
@@ -710,6 +966,7 @@ const getProjectDetails = asyncHandler(async (req, res) => {
             as: "assignedMembers"
         }
     });
+
 
     aggregation.push({
         $lookup: {
@@ -721,36 +978,33 @@ const getProjectDetails = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
-        $project: {
-            _id: 1,
-            projectName: 1,
-            description: 1,
-            startDate: 1,
-            endDate: 1,
-            status: 1,
-            tasks: {
-                $map: {
-                    input: "$tasks",
-                    as: "task",
-                    in: {
-                        _id: "$$task._id",
-                        taskName: "$$task.taskName",
-                        amount: "$$task.amount",
-                        description: "$$task.description",
-                        status: "$$task.status"
-                    }
+        $unwind: {
+            path: "$assignedMembersDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $group: {
+            _id: "$_id",
+            projectName: { $first: "$projectName" },
+            description: { $first: "$description" },
+            startDate: { $first: "$startDate" },
+            endDate: { $first: "$endDate" },
+            status: { $first: "$status" },
+            projectTasks: {
+                $push: {
+                    _id: "$projectTasks._id",
+                    taskName: "$projectTasks.taskDetail.taskName",
+                    status: "$projectTasks.status",
                 }
             },
             assignedMembersDetails: {
-                $map: {
-                    input: "$assignedMembersDetails",
-                    as: "member",
-                    in: {
-                        userId: "$$member.userId",
-                        name: "$$member.name",
-                        username: "$$member.username",
-                        profile_image: "$$member.profile_image"
-                    }
+                $first: {
+                    userId: "$assignedMembersDetails.userId",
+                    name: "$assignedMembersDetails.name",
+                    username: "$assignedMembersDetails.username",
+                    profile_image: "$assignedMembersDetails.profile_image"
                 }
             }
         }
@@ -880,17 +1134,18 @@ const getDocDetails = asyncHandler(async (req, res) => {
 });
 
 const taskCompletionUpdate = asyncHandler(async (req, res) => {
-    const { taskId, taskUpdateDescription, status } = req.body;
+    const { taskId, taskUpdateDescription, status, taskCompletedQuantity } = req.body;
     if (!isValidObjectId(taskId)) {
         throw new ApiError(400, 'Invalid task ID');
     }
 
-    const task = await Task.findById(taskId);
+    const task = await ProjectTask.findById(taskId);
     if (!task) {
         throw new ApiError(404, 'Task not found');
     }
-    if (task.status === 'completed') {
-        throw new ApiError(400, 'Task is already completed');
+
+    if (Number(task.taskCompletedQuantity) + Number(taskCompletedQuantity) > Number(task.taskQuantity)) {
+        throw new ApiError(400, 'Task completed quantity cannot exceed task quantity');
     }
 
     const project = await Project.findById(task.projectId);
@@ -899,16 +1154,13 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
     }
 
     const uploadImages = [];
-    if (req.files && req.files.taskUpdateFile && req.files.taskUpdateFile.length > 0) {
-        for (const file of req.files.taskUpdateFile) {
-            const uploadResult = await uploadImage(file);
-            if (uploadResult.success) {
-                uploadImages.push(uploadResult.fileUrl);
-            } else {
-                throw new ApiError(500, 'Failed to upload image');
-            }
-        }
+
+    if (req.files?.taskUpdateFile?.length > 0) {
+        req.files.taskUpdateFile.forEach((file) => {
+            uploadImages.push(file.location);
+        });
     }
+
 
     // Created a Task Update History
     const taskUpdateHistory = await taskUpdateHistoryModel({
@@ -921,21 +1173,24 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
     await taskUpdateHistory.save();
 
     if (status === 'completed') {
+
+        const InvoiceNumber = await generateUniqueInvoiceNumber();
+
         const invoiceData = {
             projectName: project.projectName || 'Unknown Project',
             taskName: task.taskName,
             date: new Date().toLocaleDateString(),
-            invoiceNumber: `INV-${task._id}`,
+            invoiceNumber: InvoiceNumber,
             items: [
-                { name: task.taskName, quantity: 1, price: task.amount },
+                { name: task.taskName, quantity: taskCompletedQuantity, price: task.amount },
             ],
         };
 
-        const s3Url = await generateInvoice(invoiceData, `invoices/INV-${task._id}.pdf`);
+        const s3Url = await generateInvoice(invoiceData, `invoices/${InvoiceNumber}.pdf`);
 
         // Save the Invoice to Database
         const invoice = await Invoice.create({
-            invoiceNumber: `INV-${task._id}`,
+            invoiceNumber: InvoiceNumber,
             userId: req.user.userId,
             projectId: task.projectId,
             taskId: task._id,
@@ -950,10 +1205,12 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
             throw new ApiError(500, 'Failed to create invoice');
         }
 
+        task.taskCompletedQuantity = Number(task.taskCompletedQuantity) ? Number(task.taskCompletedQuantity) + Number(taskCompletedQuantity) : Number(taskCompletedQuantity);
+
         task.invoiceUrl = s3Url;
     }
 
-    task.status = status;
+    task.status = (Number(task.taskCompletedQuantity) ? Number(task.taskCompletedQuantity) + Number(taskCompletedQuantity) : Number(taskCompletedQuantity) >= task.taskQuantity) ? 'completed' : 'in-progress';
     task.taskUpdateDescription = taskUpdateDescription;
     task.taskUpdatePhotos = uploadImages;
     task.updateBy = req.user.userId;
@@ -972,7 +1229,6 @@ const getTaskDetails = asyncHandler(async (req, res) => {
     if (!isValidObjectId(taskId)) {
         throw new ApiError(400, 'Invalid task ID');
     }
-
 
     const aggregation = [];
     aggregation.push({
@@ -1022,13 +1278,49 @@ const getTaskDetails = asyncHandler(async (req, res) => {
         }
     });
 
-    const task = await Task.aggregate(aggregation);
+    const task = await ProjectTask.aggregate(aggregation);
 
 
     return res.status(200).json(new ApiResponse(200, task.length > 0 ? "Task details fetched successfully" : "Task not found",
         task.length > 0 ? task[0] : null));
 });
 
+const updateProjectTask = asyncHandler(async (req, res) => {
+    const projectTaskId = req.params.projectTaskId;
+    const { projectId, taskId, taskQuantity, description, taskUpdateDescription } = req.body;
+
+    if (!isValidObjectId(projectTaskId)) {
+        throw new ApiError(400, 'Invalid project task ID');
+    }
+
+    const task = await ProjectTask.findById(projectTaskId);
+    if (!task) {
+        throw new ApiError(404, 'Project task not found');
+    }
+
+    const updatedTask = await ProjectTask.findByIdAndUpdate(projectTaskId, {
+        taskQuantity,
+        description,
+        taskUpdateDescription
+    }, { new: true });
+
+    if (!updatedTask) {
+        throw new ApiError(404, 'Project task not found');
+    }
+
+    return res.status(200).json(new ApiResponse(200, "Project task updated successfully", updatedTask));
+});
+
+const deleteProjectTask = asyncHandler(async (req, res) => {
+    const projectTaskId = req.params.projectTaskId;
+
+    const task = await ProjectTask.findByIdAndDelete(projectTaskId);
+    if (!task) {
+        throw new ApiError(404, 'Project task not found');
+    }
+
+    return res.status(200).json(new ApiResponse(200, 'Project task deleted successfully'));
+});
 
 const getAllInvoicesProject = asyncHandler(async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -1060,7 +1352,9 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
     });
 
     const assignedProject = await AssignTask.aggregate(aggregationTask);
+    // console.log(assignedProject);
     const projectIds = assignedProject.map(item => item.projectId);
+    // console.log(projectIds);
 
 
     const aggregation = [];
@@ -1110,6 +1404,7 @@ const getAllInvoicesProject = asyncHandler(async (req, res) => {
     });
 
     const result = await Invoice.aggregate(aggregation);
+    // console.log(result);
     const invoices = result[0].invoices;
     const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
     const totalPages = Math.ceil(totalRecords / limit);
@@ -1403,4 +1698,11 @@ export {
     ProjectInvoices,
     updateInvoiceStatus,
     getAllActivities,
+    addProjectTask,
+    getAllProjectTasks,
+    getTaskDropDown,
+    deleteProjectTask,
+    updateProjectTask,
+    getTodayClockingDetails,
+    clockOut
 };

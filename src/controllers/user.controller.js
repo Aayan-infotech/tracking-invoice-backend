@@ -84,16 +84,9 @@ const updateUserDetails = asyncHandler(async (req, res) => {
 
   let profile_image = user.profile_image;
 
-  if (req.files && req.files.profile_image) {
-    if (user.profile_image) {
-      await deleteObject(user.profile_image);
-    }
-
-    const updateStatus = await uploadImage(req.files.profile_image[0]);
-
-    if (updateStatus.success) {
-      profile_image = updateStatus.fileUrl;
-    }
+  if (req.files?.profile_image?.length > 0) {
+    const file = req.files.profile_image[0];
+    profile_image = file.location;
   }
 
   //   send email
@@ -184,16 +177,9 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   let profile_image = user.profile_image;
 
-  if (req.files && req.files.profile_image) {
-    // if (user.profile_image) {
-    //   await deleteObject(user.profile_image);
-    // }
-
-    const updateStatus = await uploadImage(req.files.profile_image[0]);
-
-    if (updateStatus.success) {
-      profile_image = updateStatus.fileUrl;
-    }
+  if (req.files?.profile_image?.length > 0) {
+    const file = req.files.profile_image[0];
+    profile_image = file.location;
   }
 
   user.name = name;
@@ -334,12 +320,12 @@ const getNotifications = asyncHandler(async (req, res) => {
 
 
 const updateNotification = asyncHandler(async (req, res) => {
-  const { notificationId , isRead } = req.body;
+  const { notificationId, isRead } = req.body;
   if (!notificationId) {
     throw new ApiError(400, "Notification ID is required");
   }
 
-  if(!isValidObjectId(notificationId)) {
+  if (!isValidObjectId(notificationId)) {
     throw new ApiError(400, "Invalid Notification ID");
   }
 

@@ -38,35 +38,56 @@ const taskSchema = joi.object({
         'string.max': 'Task name must not exceed 100 characters',
         'any.required': 'Task name is required',
     }),
-    description: joi.string().min(10).max(500).required().messages({
+    amount: joi.number().min(0).required().messages({
+        'number.base': 'Amount must be a number',
+        'number.min': 'Amount must be at least 0',
+        'any.required': 'Amount is required',
+    }),
+    status: joi.string().valid('active', 'blocked').default('active').messages({
+        'string.base': 'Status must be a string',
+        'any.only': 'Status must be one of the following: active, blocked',
+        'any.required': 'Status is required',
+    }),
+    description: joi.string().min(10).max(500).allow('').messages({
         'string.base': 'Description must be a string',
         'string.empty': 'Description cannot be empty',
         'string.min': 'Description must be at least 10 characters long',
         'string.max': 'Description must not exceed 500 characters',
         'any.required': 'Description is required',
     }),
-    status: joi.string().valid('pending', 'in progress', 'completed').default('pending').messages({
-        'string.base': 'Status must be a string',
-        'any.only': 'Status must be one of the following: pending, in progress, completed',
+});
+
+const projectTaskSchema = joi.object({
+    projectId: joi.string().required().messages({
+        'string.base': 'Project ID must be a string',
+        'string.empty': 'Project ID cannot be empty',
+        'any.required': 'Project ID is required',
     }),
-    amount: joi.number().min(0).required().messages({
-        'number.base': 'Amount must be a number',
-        'number.min': 'Amount must be at least 0',
-        'any.required': 'Amount is required',
+    taskId: joi.string().required().messages({
+        'string.base': 'Task ID must be a string',
+        'string.empty': 'Task ID cannot be empty',
+        'any.required': 'Task ID is required',
     }),
     taskQuantity: joi.number().min(1).required().messages({
         'number.base': 'Task quantity must be a number',
         'number.min': 'Task quantity must be at least 1',
         'any.required': 'Task quantity is required',
     }),
-    projectId: joi.string().required().messages({
-        'string.base': 'Project ID must be a string',
-        'string.empty': 'Project ID cannot be empty',
-        'any.required': 'Project ID is required',
+    status: joi.string().valid('pending', 'in progress', 'completed').default('pending').messages({
+        'string.base': 'Status must be a string',
+        'any.only': 'Status must be one of the following: pending, in progress, completed',
+        'any.required': 'Status is required',
     }),
     taskUpdateDescription: joi.string().max(1000).optional().messages({
         'string.base': 'Task update description must be a string',
         'string.max': 'Task update description must not exceed 1000 characters',
+    }),
+    description: joi.string().min(10).max(500).required().messages({
+        'string.base': 'Description must be a string',
+        'string.empty': 'Description cannot be empty',
+        'string.min': 'Description must be at least 10 characters long',
+        'string.max': 'Description must not exceed 500 characters',
+        'any.required': 'Description is required',
     }),
 });
 
@@ -129,5 +150,14 @@ const taskUpdateSchema = joi.object({
         'string.base': 'Task update description must be a string',
         'string.max': 'Task update description must not exceed 1000 characters',
     }),
+    taskCompletedQuantity: joi.number().when('status', {
+        is: 'completed',
+        then: joi.required().messages({
+            'any.required': 'Task completed quantity is required when status is completed',
+            'number.base': 'Task completed quantity must be a number',
+        }),
+        otherwise: joi.optional()
+    }),
 });
-export { projectSchema, taskSchema, assignTaskSchema, qualityAssuranceSchema, clockInSchema, taskUpdateSchema };
+
+export { projectSchema, taskSchema, assignTaskSchema, qualityAssuranceSchema, clockInSchema, taskUpdateSchema, projectTaskSchema };

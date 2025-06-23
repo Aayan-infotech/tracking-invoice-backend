@@ -1,5 +1,5 @@
 // Import required modules
-import { nanoid } from "nanoid";
+import { nanoid, customAlphabet } from "nanoid";
 import { User } from "../models/user.model.js";
 import { ApiError } from "./ApiError.js";
 
@@ -31,4 +31,28 @@ const generateUniqueUserName = async (email) => {
   return username;
 };
 
-export { generateUniqueUserId, generateOTP, generateUniqueUserName };
+const randomSuffix = customAlphabet('1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10);
+
+const generateUniqueInvoiceNumber = async () => {
+  const date = new Date();
+  const yyyymmdd = date.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+  const rand = randomSuffix();
+  return `INV-${yyyymmdd}-${rand}`;
+}
+
+// this function returns distance in meters between two coordinates
+const distance = (coords1, coords2) => {
+  const { lat: lat1, lon: lon1 } = coords1;
+  const { lat: lat2, lon: lon2 } = coords2;
+  const degToRad = x => x * Math.PI / 180;
+  const R = 6371;
+  const halfDLat = degToRad(lat2 - lat1) / 2;
+  const halfDLon = degToRad(lon2 - lon1) / 2;
+  const a = Math.sin(halfDLat) * Math.sin(halfDLat) +
+    Math.cos(degToRad(lat1)) * Math.cos(degToRad(lat2)) *
+    Math.sin(halfDLon) * Math.sin(halfDLon);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c * 1000;
+}
+
+export { generateUniqueUserId, generateOTP, generateUniqueUserName, generateUniqueInvoiceNumber, distance };
