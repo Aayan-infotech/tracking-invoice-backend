@@ -11,7 +11,12 @@ const taskUpdateHistorySchema = new mongoose.Schema({
         required: true,
         maxlength: 1000
     },
-    status:{
+    taskCompletedQuantity: {
+        type: Number,
+        required: true,
+        min: 1
+    },
+    status: {
         type: String,
         enum: ['pending', 'in progress', 'completed'],
         default: 'pending'

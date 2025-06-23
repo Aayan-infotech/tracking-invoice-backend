@@ -25,6 +25,13 @@ const invoiceSchema = new mongoose.Schema({
             return this.invoiceType === 'task';
         }
     },
+    taskCompletedQuantity: {
+        type: Number,
+        required: function () {
+            return this.invoiceType === 'task';
+        },
+        min: 1
+    },
     invoiceUrl: {
         type: String,
         required: true,

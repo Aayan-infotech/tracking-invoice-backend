@@ -1000,7 +1000,7 @@ const getProjectDetails = asyncHandler(async (req, res) => {
                 }
             },
             assignedMembersDetails: {
-                $first: {
+                $addToSet: {
                     userId: "$assignedMembersDetails.userId",
                     name: "$assignedMembersDetails.name",
                     username: "$assignedMembersDetails.username",
@@ -1144,7 +1144,7 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Task not found');
     }
 
-    if (Number(task.taskCompletedQuantity) + Number(taskCompletedQuantity) > Number(task.taskQuantity)) {
+    if (Number(task.taskCompletedQuantity || 0) + Number(taskCompletedQuantity || 0) > Number(task.taskQuantity || 0)) {
         throw new ApiError(400, 'Task completed quantity cannot exceed task quantity');
     }
 
@@ -1167,6 +1167,7 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
         taskId: task._id,
         updateDescription: taskUpdateDescription,
         status,
+        taskCompletedQuantity,
         updatePhotos: uploadImages,
         updatedBy: req.user.userId
     });
@@ -1193,6 +1194,7 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
             invoiceNumber: InvoiceNumber,
             userId: req.user.userId,
             projectId: task.projectId,
+            taskCompletedQuantity,
             taskId: task._id,
             invoiceUrl: s3Url,
             amount: task.amount,
@@ -1242,6 +1244,20 @@ const getTaskDetails = asyncHandler(async (req, res) => {
             as: "taskUpdateHistory"
         }
     });
+    aggregation.push({
+        $lookup: {
+            from: "tasks",
+            localField: "taskId",
+            foreignField: "_id",
+            as: "taskDetails"
+        }
+    });
+    aggregation.push({
+        $unwind: {
+            path: "$taskDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
 
     aggregation.push({
         $lookup: {
@@ -1261,7 +1277,7 @@ const getTaskDetails = asyncHandler(async (req, res) => {
     aggregation.push({
         $project: {
             _id: 1,
-            taskName: 1,
+            taskName: "$taskDetails.taskName",
             description: 1,
             amount: 1,
             status: 1,
@@ -1269,6 +1285,8 @@ const getTaskDetails = asyncHandler(async (req, res) => {
             taskUpdateDescription: 1,
             invoiceUrl: 1,
             taskUpdateHistory: "$taskUpdateHistory",
+            taskQuantity: 1,
+            taskCompletedQuantity: 1,
             projectDetails: {
                 _id: "$projectDetails._id",
                 projectName: "$projectDetails.projectName",
