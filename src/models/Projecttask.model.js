@@ -34,7 +34,7 @@ const taskSchema = new mongoose.Schema({
     },
     taskCompletedQuantity: {
         type: Number,
-        required: true,
+        required: false,
         min: 1
     },
     taskUpdateDescription: {

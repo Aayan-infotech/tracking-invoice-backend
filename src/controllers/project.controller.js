@@ -867,9 +867,35 @@ const getProjectDetails = asyncHandler(async (req, res) => {
 
     aggregation.push({
         $lookup: {
-            from: "projecttasks",
+            from: "assigntasks",
             localField: "_id",
             foreignField: "projectId",
+            as: "assignedMembers"
+        }
+    });
+
+
+    aggregation.push({
+        $lookup: {
+            from: "users",
+            localField: "assignedMembers.userId",
+            foreignField: "userId",
+            as: "assignedMembersDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$assignedMembersDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
+        $lookup: {
+            from: "projecttasks",
+            localField: "assignedMembers.projectTaskId",
+            foreignField: "_id",
             as: "projectTasks"
         }
     });
@@ -898,31 +924,9 @@ const getProjectDetails = asyncHandler(async (req, res) => {
     });
 
 
-    aggregation.push({
-        $lookup: {
-            from: "assigntasks",
-            localField: "_id",
-            foreignField: "projectId",
-            as: "assignedMembers"
-        }
-    });
 
 
-    aggregation.push({
-        $lookup: {
-            from: "users",
-            localField: "assignedMembers.userId",
-            foreignField: "userId",
-            as: "assignedMembersDetails"
-        }
-    });
 
-    aggregation.push({
-        $unwind: {
-            path: "$assignedMembersDetails",
-            preserveNullAndEmptyArrays: true
-        }
-    });
 
     aggregation.push({
         $group: {
@@ -933,7 +937,7 @@ const getProjectDetails = asyncHandler(async (req, res) => {
             endDate: { $first: "$endDate" },
             status: { $first: "$status" },
             projectTasks: {
-                $push: {
+                $addToSet: {
                     _id: "$projectTasks._id",
                     taskName: "$projectTasks.taskDetail.taskName",
                     status: "$projectTasks.status",
@@ -1078,8 +1082,6 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
     if (!isValidObjectId(taskId)) {
         throw new ApiError(400, 'Invalid task ID');
     }
-
-
 
     const task = await ProjectTask.findById(taskId).populate('taskId', 'taskName taskQuantity taskCompletedQuantity amount');
 
