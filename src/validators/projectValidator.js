@@ -141,22 +141,18 @@ const taskUpdateSchema = joi.object({
         'string.empty': 'Task ID cannot be empty',
         'any.required': 'Task ID is required',
     }),
-    status: joi.string().valid('pending', 'in progress', 'completed').required().messages({
-        'string.base': 'Status must be a string',
-        'any.only': 'Status must be one of the following: pending, in progress, completed',
-        'any.required': 'Status is required',
-    }),
+    // status: joi.string().valid('pending', 'in progress', 'completed').required().messages({
+    //     'string.base': 'Status must be a string',
+    //     'any.only': 'Status must be one of the following: pending, in progress, completed',
+    //     'any.required': 'Status is required',
+    // }),
     taskUpdateDescription: joi.string().max(1000).optional().messages({
         'string.base': 'Task update description must be a string',
         'string.max': 'Task update description must not exceed 1000 characters',
     }),
-    taskCompletedQuantity: joi.number().when('status', {
-        is: 'completed',
-        then: joi.required().messages({
-            'any.required': 'Task completed quantity is required when status is completed',
-            'number.base': 'Task completed quantity must be a number',
-        }),
-        otherwise: joi.optional()
+    taskCompletedQuantity: joi.number().required().messages({
+        'number.base': 'Task completed quantity must be a number',
+        'any.required': 'Task completed quantity is required',
     }),
 });
 

@@ -420,7 +420,7 @@ const getAllTaskofProject = asyncHandler(async (req, res) => {
     });
 
     const tasks = await ProjectTask.aggregate(aggregation);
-    
+
 
     if (!tasks || tasks.length === 0) {
         throw new ApiError(404, 'No tasks found for this project');
@@ -1088,7 +1088,10 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Task not found');
     }
 
-    if (Number(task.taskCompletedQuantity || 0) + Number(taskCompletedQuantity || 0) > Number(task.taskQuantity || 0)) {
+    const completedQuantity = Number(task.taskCompletedQuantity || 0) + Number(taskCompletedQuantity || 0);
+    const taskCompletedStatus = completedQuantity >= task.taskQuantity ? 'completed' : 'in progress';
+
+    if (completedQuantity > Number(task.taskQuantity || 0)) {
         throw new ApiError(400, 'Task completed quantity cannot exceed task quantity');
     }
 
@@ -1110,59 +1113,58 @@ const taskCompletionUpdate = asyncHandler(async (req, res) => {
     const taskUpdateHistory = await taskUpdateHistoryModel({
         taskId: task._id,
         updateDescription: taskUpdateDescription,
-        status,
+        status: taskCompletedStatus,
         taskCompletedQuantity,
         updatePhotos: uploadImages,
         updatedBy: req.user.userId
     });
     await taskUpdateHistory.save();
 
-    if (status === 'completed') {
 
-        const InvoiceNumber = await generateUniqueInvoiceNumber();
+    const InvoiceNumber = await generateUniqueInvoiceNumber();
 
-        const invoiceData = [{
-            projectName: project.projectName || 'Unknown Project',
-            taskName: task?.taskId?.taskName,
-            date: new Date().toLocaleDateString(),
-            invoiceNumber: InvoiceNumber,
-            items: [
-                { name: task?.taskId?.taskName, quantity: taskCompletedQuantity, price: task?.taskId?.amount },
-            ],
-            user: {
-                name: req.user.name || 'Unknown User',
-                email: req.user.email || 'Unknown Email',
-                username: req.user.username || 'Unknown Username',
-                address: req.user.address || 'Unknown Address',
-            }
-        }];
-
-        const s3Url = await generateInvoice(invoiceData, `invoices/${InvoiceNumber}.pdf`);
-
-        // Save the Invoice to Database
-        const invoice = await Invoice.create({
-            invoiceNumber: InvoiceNumber,
-            userId: req.user.userId,
-            projectId: task.projectId,
-            taskCompletedQuantity,
-            taskId: task._id,
-            invoiceUrl: s3Url,
-            amount: task.amount,
-            status: 'unpaid',
-            InvoiceDate: new Date(),
-            invoiceType: 'task'
-        });
-
-        if (!invoice) {
-            throw new ApiError(500, 'Failed to create invoice');
+    const invoiceData = [{
+        projectName: project.projectName || 'Unknown Project',
+        taskName: task?.taskId?.taskName,
+        date: new Date().toLocaleDateString(),
+        invoiceNumber: InvoiceNumber,
+        items: [
+            { name: task?.taskId?.taskName, quantity: taskCompletedQuantity, price: task?.taskId?.amount },
+        ],
+        user: {
+            name: req.user.name || 'Unknown User',
+            email: req.user.email || 'Unknown Email',
+            username: req.user.username || 'Unknown Username',
+            address: req.user.address || 'Unknown Address',
         }
+    }];
 
-        task.taskCompletedQuantity = Number(task.taskCompletedQuantity) ? Number(task.taskCompletedQuantity) + Number(taskCompletedQuantity) : Number(taskCompletedQuantity);
+    const s3Url = await generateInvoice(invoiceData, `invoices/${InvoiceNumber}.pdf`);
 
-        task.invoiceUrl = s3Url;
+    // Save the Invoice to Database
+    const invoice = await Invoice.create({
+        invoiceNumber: InvoiceNumber,
+        userId: req.user.userId,
+        projectId: task.projectId,
+        taskCompletedQuantity,
+        taskId: task._id,
+        invoiceUrl: s3Url,
+        amount: task.amount,
+        status: 'unpaid',
+        InvoiceDate: new Date(),
+        invoiceType: 'task'
+    });
+
+    if (!invoice) {
+        throw new ApiError(500, 'Failed to create invoice');
     }
 
-    task.status = (Number(task.taskCompletedQuantity) ? Number(task.taskCompletedQuantity) + Number(taskCompletedQuantity) : Number(taskCompletedQuantity) >= task.taskQuantity) ? 'completed' : 'in-progress';
+    task.taskCompletedQuantity = completedQuantity;
+
+    task.invoiceUrl = s3Url;
+
+
+    task.status = taskCompletedStatus;
     task.taskUpdateDescription = taskUpdateDescription;
     task.taskUpdatePhotos = uploadImages;
     task.updateBy = req.user.userId;
