@@ -420,6 +420,7 @@ const getAllTaskofProject = asyncHandler(async (req, res) => {
     });
 
     const tasks = await ProjectTask.aggregate(aggregation);
+    
 
     if (!tasks || tasks.length === 0) {
         throw new ApiError(404, 'No tasks found for this project');
@@ -544,9 +545,7 @@ const assignTask = asyncHandler(async (req, res) => {
 
 
 
-    const projectTask = await ProjectTask.findById(taskId);
-
-
+    const projectTask = await ProjectTask.findById(taskId).populate('taskId', 'taskName amount');
     if (!projectTask) {
         throw new ApiError(404, 'Project Task not found');
     }
@@ -562,9 +561,9 @@ const assignTask = asyncHandler(async (req, res) => {
     if (deviceDetails && deviceDetails.length > 0) {
         // Send Push Notification to the user
         const deviceTokens = deviceDetails.map(device => device.deviceToken);
-        sendPushNotification(deviceTokens, 'Task Assigned', `You have been assigned a new task: ${task.taskName}`, req.user.userId, userId, {
+        sendPushNotification(deviceTokens, 'Task Assigned', `You have been assigned a new task: ${projectTask.taskId.taskName}`, req.user.userId, userId, {
             type: "task_assigned",
-            task: JSON.stringify(task),
+            task: JSON.stringify(projectTask.taskId),
         });
 
     }
