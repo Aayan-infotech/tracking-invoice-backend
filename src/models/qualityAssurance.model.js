@@ -2,9 +2,10 @@ import mongoose from "mongoose";
 
 const qualityAssuranceSchema = new mongoose.Schema({
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project", required: true },
+    documentTypeId: { type: mongoose.Schema.Types.ObjectId, ref: "DocumentType", required: true },
     documentName:{
         type: String,
-        required: true,
+        required: false,
         minlength: 3,
         maxlength: 100
     },

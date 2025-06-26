@@ -39,7 +39,10 @@ import {
   getTodayClockingDetails,
   clockOut,
   getProjectInvoices,
-  generateProjectInvoice
+  generateProjectInvoice,
+  getAllDocumentType,
+  addDocumentType,
+  getDocumentTypeDropdown
 } from "../controllers/project.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
@@ -70,6 +73,12 @@ router.post('/tasks', verifyJWT, validateRequest(taskSchema), addTask);
 router.put('/tasks/:taskId', verifyJWT, validateRequest(taskSchema), updateTask);
 router.delete('/tasks/:taskId', verifyJWT, deleteTask);
 router.get('/tasks/:projectId', verifyJWT, getAllTaskofProject);
+
+
+// DocumentType 
+router.get('/get-document-type', verifyJWT, getAllDocumentType);
+router.get('/get-document-type-dropdown', verifyJWT, getDocumentTypeDropdown);
+router.post('/add-document-type', verifyJWT, addDocumentType);
 
 
 // Project Tasks
@@ -112,7 +121,7 @@ router.get('/get-clocking-details', verifyJWT, getTodayClockingDetails);
 router.post('/clock-out', verifyJWT, validateRequest(clockInSchema), clockOut);
 router.get('/project-details/:projectId', verifyJWT, getProjectDetails);
 router.get('/document-type', verifyJWT, getDocumentType);
-router.get('/doc-details/:docId', verifyJWT, getDocDetails);
+router.get('/get-document-pdf', verifyJWT, getDocDetails);
 router.get('/task-details/:taskId', verifyJWT, getTaskDetails);
 router.put(
   '/task-completion-update',

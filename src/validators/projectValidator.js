@@ -115,12 +115,17 @@ const qualityAssuranceSchema = joi.object({
         'string.empty': 'Project ID cannot be empty',
         'any.required': 'Project ID is required',
     }),
-    documentName: joi.string().min(3).max(100).required().messages({
-        'string.base': 'Document name must be a string',
-        'string.empty': 'Document name cannot be empty',
-        'string.min': 'Document name must be at least 3 characters long',
-        'string.max': 'Document name must not exceed 100 characters',
-        'any.required': 'Document name is required',
+    // documentName: joi.string().min(3).max(100).required().messages({
+    //     'string.base': 'Document name must be a string',
+    //     'string.empty': 'Document name cannot be empty',
+    //     'string.min': 'Document name must be at least 3 characters long',
+    //     'string.max': 'Document name must not exceed 100 characters',
+    //     'any.required': 'Document name is required',
+    // }),
+    documentTypeId: joi.string().required().messages({
+        'string.base': 'Document type must be a string',
+        'string.empty': 'Document type  cannot be empty',
+        'any.required': 'Document type  is required',
     }),
 });
 

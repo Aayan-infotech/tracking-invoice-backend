@@ -17,6 +17,7 @@ import sendPushNotification from "../utils/sendPushNotification.js";
 import ProjectTask from "../models/Projecttask.model.js";
 import { assign } from "nodemailer/lib/shared/index.js";
 import { distance, generateUniqueInvoiceNumber } from "../utils/HelperFunctions.js";
+import DocumentType from "../models/documentType.model.js";
 
 
 const getAllProjects = asyncHandler(async (req, res) => {
@@ -635,6 +636,22 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
+        $lookup: {
+            from: "documenttypes",
+            localField: "documentTypeId",
+            foreignField: "_id",
+            as: "documentTypeDetails"
+        }
+    });
+
+    aggregation.push({
+        $unwind: {
+            path: "$documentTypeDetails",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+
+    aggregation.push({
         $facet: {
             qualityAssurances: [
                 { $skip: skip },
@@ -643,7 +660,7 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
                     $project: {
                         projectName: "$projectDetails.projectName",
                         projectId: "$projectDetails._id",
-                        documentName: 1,
+                        documentName: "$documentTypeDetails.name",
                         documentFile: 1,
                         status: 1,
                         _id: 1,
@@ -675,9 +692,9 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
 
 
 const addQualityAssurance = asyncHandler(async (req, res) => {
-    const { projectId, documentName } = req.body;
+    const { projectId, documentTypeId } = req.body;
 
-    const existdocument = await QualityAssurance.findOne({ projectId, documentName });
+    const existdocument = await QualityAssurance.findOne({ projectId, documentTypeId });
     if (existdocument) {
         throw new ApiError(400, 'Document already exists');
     }
@@ -695,7 +712,7 @@ const addQualityAssurance = asyncHandler(async (req, res) => {
 
     const newQualityAssurance = new QualityAssurance({
         projectId,
-        documentName,
+        documentTypeId,
         documentFile: documentFile,
         typeOfDocument: 'file',
     });
@@ -1064,16 +1081,16 @@ const getDocumentType = asyncHandler(async (req, res) => {
 
 
 const getDocDetails = asyncHandler(async (req, res) => {
-    const { docId } = req.params;
-    if (!isValidObjectId(docId)) {
-        throw new ApiError(400, 'Invalid document ID');
+    const { documentTypeId, projectId } = req.body;
+    if (!isValidObjectId(documentTypeId)) {
+        throw new ApiError(400, 'Invalid document type ID');
+    }
+    if (!isValidObjectId(projectId)) {
+        throw new ApiError(400, 'Invalid project ID');
     }
 
-    const docDetails = await QualityAssurance.findById(docId).select('documentName documentFile typeOfDocument');
-    if (!docDetails) {
-        throw new ApiError(404, 'Document details not found');
-    }
-    res.status(200).json(new ApiResponse(200, 'Document details fetched successfully', docDetails));
+    const docDetails = await QualityAssurance.find({ documentTypeId, projectId }).select('documentName documentFile typeOfDocument');
+    res.status(200).json(new ApiResponse(200, docDetails.length > 0 ? 'Documents fetched successfully' : 'No documents found', docDetails.length > 0 ? docDetails : null));
 });
 
 const taskCompletionUpdate = asyncHandler(async (req, res) => {
@@ -1815,6 +1832,65 @@ const generateProjectInvoice = asyncHandler(async (req, res) => {
 });
 
 
+const getAllDocumentType = asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const skip = (page - 1) * limit;
+
+    const aggregation = [];
+    aggregation.push({
+        $facet: {
+            documentTypes: [
+                { $skip: skip },
+                { $limit: limit },
+                {
+                    $project: {
+                        _id: 1,
+                        name: 1,
+                        description: 1,
+                        createdAt: 1
+                    }
+                },
+                { $sort: { createdAt: -1 } }
+            ],
+            totalCount: [{ $count: "count" }]
+        }
+    });
+
+    const result = await DocumentType.aggregate(aggregation);
+
+    const documentTypes = result[0].documentTypes;
+    const totalRecords = result[0].totalCount.length > 0 ? result[0].totalCount[0].count : 0;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    res.status(200).json(new ApiResponse(200, documentTypes.length > 0 ? 'Document types fetched successfully' : 'No document types found', documentTypes.length > 0 ? {
+        documentTypes,
+        total_page: totalPages,
+        current_page: page,
+        total_records: totalRecords,
+        per_page: limit
+    } : null));
+});
+
+const addDocumentType = asyncHandler(async (req, res) => {
+    const { name, description } = req.body;
+    if (!name) {
+        throw new ApiError(400, 'Document Type name is required');
+    }
+
+    const existingDocumentType = await DocumentType.findOne({ name });
+    if (existingDocumentType) {
+        throw new ApiError(400, 'Document Type with this name already exists');
+    }
+
+    const newDocumentType = await DocumentType.create({ name, description });
+    res.status(201).json(new ApiResponse(201, 'Document Type created successfully', newDocumentType));
+});
+
+const getDocumentTypeDropdown = asyncHandler(async (req, res) => {
+    const documentTypes = await DocumentType.find({}, { _id: 1, name: 1 });
+    res.status(200).json(new ApiResponse(200, 'Document types fetched successfully', documentTypes));
+});
 export {
     getAllProjects,
     addProject,
@@ -1853,5 +1929,8 @@ export {
     getTodayClockingDetails,
     clockOut,
     getProjectInvoices,
-    generateProjectInvoice
+    generateProjectInvoice,
+    getAllDocumentType,
+    addDocumentType,
+    getDocumentTypeDropdown
 };
