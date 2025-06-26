@@ -1081,15 +1081,14 @@ const getDocumentType = asyncHandler(async (req, res) => {
 
 
 const getDocDetails = asyncHandler(async (req, res) => {
-    const { documentTypeId, projectId } = req.body;
-    if (!isValidObjectId(documentTypeId)) {
-        throw new ApiError(400, 'Invalid document type ID');
-    }
+    const { projectId } = req.body;
     if (!isValidObjectId(projectId)) {
         throw new ApiError(400, 'Invalid project ID');
     }
+    // console.log(projectId);
+    const docDetails = await QualityAssurance.find({ projectId }).populate('documentTypeId', 'name').select('documentFile documentTypeId typeOfDocument');
 
-    const docDetails = await QualityAssurance.find({ documentTypeId, projectId }).select('documentName documentFile typeOfDocument');
+    // console.log(docDetails);
     res.status(200).json(new ApiResponse(200, docDetails.length > 0 ? 'Documents fetched successfully' : 'No documents found', docDetails.length > 0 ? docDetails : null));
 });
 
