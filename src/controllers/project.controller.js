@@ -1090,7 +1090,7 @@ const getDocumentType = asyncHandler(async (req, res) => {
 
 
 const getDocDetails = asyncHandler(async (req, res) => {
-    const { projectId } = req.body;
+    const { projectId } = req.params;
     if (!isValidObjectId(projectId)) {
         throw new ApiError(400, 'Invalid project ID');
     }

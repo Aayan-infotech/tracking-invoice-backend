@@ -121,7 +121,7 @@ router.get('/get-clocking-details', verifyJWT, getTodayClockingDetails);
 router.post('/clock-out', verifyJWT, validateRequest(clockInSchema), clockOut);
 router.get('/project-details/:projectId', verifyJWT, getProjectDetails);
 router.get('/document-type', verifyJWT, getDocumentType);
-router.get('/get-documents', verifyJWT, getDocDetails);
+router.get('/get-documents/:projectId', verifyJWT, getDocDetails);
 router.get('/task-details/:taskId', verifyJWT, getTaskDetails);
 router.put(
   '/task-completion-update',
