@@ -296,6 +296,10 @@ const getAllProjectTasks = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
+        $sort: { createdAt: -1 },
+    });
+
+    aggregation.push({
         $facet: {
             projectTasks: [
                 { $skip: skip },
@@ -488,9 +492,7 @@ const getAssignTasks = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
-        $sort: {
-            "taskDetails.createdAt": -1
-        }
+        $sort: { createdAt: -1 },
     });
 
     aggregation.push({
@@ -652,6 +654,10 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
     });
 
     aggregation.push({
+        $sort: { createdAt: -1 },
+    });
+
+    aggregation.push({
         $facet: {
             qualityAssurances: [
                 { $skip: skip },
@@ -661,12 +667,12 @@ const getQualityAssurance = asyncHandler(async (req, res) => {
                         projectName: "$projectDetails.projectName",
                         projectId: "$projectDetails._id",
                         documentName: "$documentTypeDetails.name",
+                        documentTypeId: "$documentTypeDetails._id",
                         documentFile: 1,
                         status: 1,
                         _id: 1,
                     }
                 },
-                { $sort: { createdAt: -1 } }
             ],
             totalCount: [{ $count: "count" }]
         }
@@ -731,7 +737,10 @@ const updateQualityAssurance = asyncHandler(async (req, res) => {
     if (!qualityAssurance) {
         throw new ApiError(404, 'Quality assurance document not found');
     }
-    const { projectId, documentName } = req.body;
+    const { projectId, documentTypeId } = req.body;
+    if (!projectId || !documentTypeId) {
+        throw new ApiError(400, 'Project ID and Document Type ID are required');
+    }
 
     let documentFile = qualityAssurance.documentFile;
     if (req.files?.documentFile?.length > 0) {
@@ -741,7 +750,7 @@ const updateQualityAssurance = asyncHandler(async (req, res) => {
 
     const updatedQualityAssurance = await QualityAssurance.findByIdAndUpdate(qualityAssuranceId, {
         projectId,
-        documentName,
+        documentTypeId,
         documentFile
     }, { new: true });
 
@@ -1427,6 +1436,10 @@ const ProjectInvoices = asyncHandler(async (req, res) => {
             path: "$projectDetails",
             preserveNullAndEmptyArrays: true
         }
+    });
+
+    aggregation.push({
+        $sort: { createdAt: -1 },
     });
 
     aggregation.push({

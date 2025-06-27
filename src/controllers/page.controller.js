@@ -10,7 +10,7 @@ const getAllPages = asyncHandler(async (req, res) => {
     const limit = Math.max(1, parseInt(req.query.limit) || 10);
     const skip = (page - 1) * limit;
 
-    
+
     const aggregation = [];
     aggregation.push({
         $facet: {
@@ -94,4 +94,13 @@ const deletePage = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, 'Page deleted successfully', null));
 });
 
-export { getAllPages, addPage, updatePage, deletePage };
+const getPage = asyncHandler(async (req, res) => {
+    const { pageName } = req.query;
+    if (!pageName) {
+        throw new ApiError(400, 'Page name is required');
+    }
+    const page = await Page.findOne({ pageName });
+    return res.status(200).json(new ApiResponse(200, 'Get Page Successfully', page));
+});
+
+export { getAllPages, addPage, updatePage, deletePage, getPage };
