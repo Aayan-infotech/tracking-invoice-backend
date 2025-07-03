@@ -9,7 +9,7 @@ const taskSchema = new mongoose.Schema({
     },
     amount: {
         type: Number,
-        required: true,
+        required: false,
         min: 0
     },
     status: {

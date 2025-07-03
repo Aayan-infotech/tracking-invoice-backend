@@ -38,22 +38,20 @@ const taskSchema = joi.object({
         'string.max': 'Task name must not exceed 100 characters',
         'any.required': 'Task name is required',
     }),
-    amount: joi.number().min(0).required().messages({
+    amount: joi.number().min(0).optional().messages({
         'number.base': 'Amount must be a number',
         'number.min': 'Amount must be at least 0',
-        'any.required': 'Amount is required',
     }),
     status: joi.string().valid('active', 'blocked').default('active').messages({
         'string.base': 'Status must be a string',
         'any.only': 'Status must be one of the following: active, blocked',
-        'any.required': 'Status is required',
     }),
     description: joi.string().min(10).max(500).allow('').messages({
         'string.base': 'Description must be a string',
         'string.empty': 'Description cannot be empty',
         'string.min': 'Description must be at least 10 characters long',
         'string.max': 'Description must not exceed 500 characters',
-        'any.required': 'Description is required',
+ 
     }),
 });
 
@@ -72,6 +70,11 @@ const projectTaskSchema = joi.object({
         'number.base': 'Task quantity must be a number',
         'number.min': 'Task quantity must be at least 1',
         'any.required': 'Task quantity is required',
+    }),
+    amount: joi.number().min(0).required().messages({
+        'number.base': 'Amount must be a number',
+        'number.min': 'Amount must be at least 0',
+        'any.required': 'Amount is required',
     }),
     status: joi.string().valid('pending', 'in progress', 'completed').default('pending').messages({
         'string.base': 'Status must be a string',

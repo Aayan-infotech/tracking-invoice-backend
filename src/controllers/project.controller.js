@@ -191,8 +191,8 @@ const getAllTasks = asyncHandler(async (req, res) => {
 const addTask = asyncHandler(async (req, res) => {
     const { taskName, amount, description } = req.body;
 
-    if (!taskName || !amount) {
-        throw new ApiError(400, 'Missing required fields');
+    if (!taskName) {
+        throw new ApiError(400, 'Task name is required');
     }
 
     // Check if the same task already exists in the project
@@ -347,7 +347,7 @@ const getAllProjectTasks = asyncHandler(async (req, res) => {
 });
 
 const addProjectTask = asyncHandler(async (req, res) => {
-    const { projectId, taskId, taskQuantity, description } = req.body;
+    const { projectId, amount, taskId, taskQuantity, description } = req.body;
 
     if (!projectId || !taskId || !taskQuantity || !description) {
         throw new ApiError(400, 'Missing required fields');
@@ -377,7 +377,7 @@ const addProjectTask = asyncHandler(async (req, res) => {
     const projectTask = await ProjectTask.create({
         projectId,
         taskId,
-        amount: task.amount,
+        amount,
         taskQuantity,
         description,
     });
@@ -1282,7 +1282,7 @@ const getTaskDetails = asyncHandler(async (req, res) => {
 
 const updateProjectTask = asyncHandler(async (req, res) => {
     const projectTaskId = req.params.projectTaskId;
-    const { projectId, taskId, taskQuantity, description, taskUpdateDescription } = req.body;
+    const { projectId, taskId, amount, taskQuantity, description, taskUpdateDescription } = req.body;
 
     if (!isValidObjectId(projectTaskId)) {
         throw new ApiError(400, 'Invalid project task ID');
@@ -1296,7 +1296,10 @@ const updateProjectTask = asyncHandler(async (req, res) => {
     const updatedTask = await ProjectTask.findByIdAndUpdate(projectTaskId, {
         taskQuantity,
         description,
-        taskUpdateDescription
+        taskUpdateDescription,
+        amount,
+        projectId,
+        taskId 
     }, { new: true });
 
     if (!updatedTask) {
