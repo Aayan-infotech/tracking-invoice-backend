@@ -28,7 +28,8 @@
     "nanoid": "^5.1.5",
     "nodemailer": "^6.10.0",
     "pdfkit": "^0.17.1",
-    "stream-buffers": "^3.0.3"
+    "stream-buffers": "^3.0.3",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",

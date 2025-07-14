@@ -1,10 +1,17 @@
 // Desc: Async Handler for handling async functions
 import fs from 'fs';
+import logger from './logger.js';
+
 function asyncHandler(fn) {
     return async (req, res, next) => {
         try {
             await fn(req, res, next)
         } catch (error) {
+            // Log the error
+            logger.error({
+                message: error.message,
+            });
+
             if (req.files) {
                 const keyNames = Object.keys(req.files)[0];
                 if (keyNames) {
