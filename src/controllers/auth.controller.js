@@ -470,6 +470,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
+
+
 const saveDeviceDetails = asyncHandler(async (req, res) => {
   const { deviceToken, deviceType, deviceName, modelName } = req.body;
   const user = req.user;
