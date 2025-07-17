@@ -8,7 +8,7 @@ dotenv.config();
 
 const ENV = process.env.NODE_ENV || "production";
 const REGION = process.env.AWS_REGION || "us-east-1";
-const SECRET_NAME = process.env.SECRET_NAME || "invoice-test";
+const SECRET_NAME = process.env.SECRET_NAME || "invoice-secret";
 const secretsManager = new SecretsManagerClient({ region: REGION });
 
 const loadConfig = async () => {
