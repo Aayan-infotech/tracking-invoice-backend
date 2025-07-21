@@ -6,6 +6,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
         CONTAINER_PORT = "3030"
         HOST_PORT = "3333"
+        CONTAINER_NAME = "${JOB_BASE_NAME}-container"
     }
 
     stages {
@@ -68,8 +69,8 @@ pipeline {
         stage('Stop Existing Container') {
             steps {
                 sh '''
-                    docker stop backend-container || true
-                    docker rm backend-container || true
+                    docker stop $CONTAINER_NAME || true
+                    docker rm $CONTAINER_NAME || true
                 '''
             }
         }
@@ -78,7 +79,7 @@ pipeline {
             steps {
                 sh '''
                     docker run -d \
-                    --name backend-container \
+                    --name $CONTAINER_NAME \
                     -p $HOST_PORT:$CONTAINER_PORT \
                     $IMAGE_NAME:$IMAGE_TAG
                 '''
