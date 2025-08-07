@@ -8,12 +8,12 @@ const PageSchema = joi.object({
         'string.max': 'Page name must not exceed 100 characters',
         'any.required': 'Page name is required',
     }),
-    // pageURL: joi.string().uri().required().messages({
-    //     'string.base': 'Page URL must be a string',
-    //     'string.empty': 'Page URL cannot be empty',
-    //     'string.uri': 'Page URL must be a valid URI',
-    //     'any.required': 'Page URL is required',
-    // }),
+    pageURL: joi.string().allow("").messages({
+        'string.base': 'Page URL must be a string',
+        'string.empty': 'Page URL cannot be empty',
+        'string.uri': 'Page URL must be a valid URI',
+        'any.required': 'Page URL is required',
+    }),
     pageDescription: joi.string().min(10).max(50000).required().messages({
         'string.base': 'Description must be a string',
         'string.empty': 'Description cannot be empty',
