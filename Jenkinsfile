@@ -4,7 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "docker.io/kartikeytiwari/invoice-backend"
         IMAGE_TAG = "${BUILD_NUMBER}"
-        CONTAINER_PORT = "3030"
+        CONTAINER_PORT = "3333"
         HOST_PORT = "3333"
         CONTAINER_NAME = "${JOB_BASE_NAME}-container"
     }
