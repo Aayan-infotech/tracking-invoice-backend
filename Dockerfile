@@ -10,7 +10,7 @@ RUN npm install --production
 
 COPY . .
 
-EXPOSE 3030
+EXPOSE 3333
 
 CMD ["node", "index.js"]
 
