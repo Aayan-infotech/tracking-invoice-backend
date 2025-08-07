@@ -160,7 +160,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const isValidPassword = await user.isPasswordCorrect(password);
 
   if (!isValidPassword) {
-    throw new ApiError(401, "Invalid Password");
+    throw new ApiError(403, "Invalid Password");
   }
 
   // check if user Enabled 2FA
